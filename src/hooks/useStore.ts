@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  migrateFromLocalStorage,
   listKnowledgePoints,
   listArticles,
   listTags,
@@ -55,9 +54,7 @@ export function useStore() {
   }, []);
 
   useEffect(() => {
-    migrateFromLocalStorage()
-      .then(() => seedDemo())
-      .then(refresh);
+    seedDemo().then(refresh);
   }, [refresh]);
 
   const verifyApi = useCallback(async () => {

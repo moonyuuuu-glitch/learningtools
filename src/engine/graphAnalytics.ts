@@ -1,3 +1,4 @@
+import type { Article, KnowledgePoint, Tag } from '../types'
 import { db } from '../db/database'
 
 /**
@@ -26,7 +27,7 @@ export interface GraphReport {
 }
 
 export async function analyzeGraph(staleDays = 14): Promise<GraphReport> {
-  const [allKPs, allArticles, allTags] = await Promise.all([
+  const [allKPs, allArticles, allTags]: [KnowledgePoint[], Article[], Tag[]] = await Promise.all([
     db.knowledgePoints.toArray(),
     db.articles.toArray(),
     db.tags.toArray(),
@@ -102,7 +103,7 @@ export async function findPath(
   fromId: string,
   toId: string,
 ): Promise<string[] | null> {
-  const allKPs = await db.knowledgePoints.toArray()
+  const allKPs: KnowledgePoint[] = await db.knowledgePoints.toArray()
   const adj = new Map<string, string[]>()
   for (const kp of allKPs) {
     adj.set(kp.id, kp.linkedPoints)
@@ -137,7 +138,7 @@ export async function findLinkCandidates(
   kpId: string,
   limit = 10,
 ): Promise<{ id: string; title: string; score: number; reason: string }[]> {
-  const allKPs = await db.knowledgePoints.toArray()
+  const allKPs: KnowledgePoint[] = await db.knowledgePoints.toArray()
   const source = allKPs.find((kp) => kp.id === kpId)
   if (!source) return []
 

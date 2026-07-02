@@ -1,5 +1,5 @@
 import Fuse from 'fuse.js'
-import type { Fragment } from '../types'
+import type { Fragment, KnowledgePoint } from '../types'
 import { db } from '../db/database'
 
 /**
@@ -99,7 +99,7 @@ export async function findRelatedKPsByTags(
   limit = 10,
 ): Promise<{ id: string; title: string; overlapCount: number }[]> {
   const tagSet = new Set(tags)
-  const allKPs = await db.knowledgePoints.toArray()
+  const allKPs: KnowledgePoint[] = await db.knowledgePoints.toArray()
 
   return allKPs
     .filter((kp) => kp.id !== excludeId)
