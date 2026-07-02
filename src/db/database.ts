@@ -1,6 +1,6 @@
 import type { Article, Category, Insight, KnowledgePoint, LinkSuggestion, Scene, Tag } from '../types'
 
-const STORAGE_KEY = 'learningtools.storage.v1'
+const STORAGE_KEY = 'learningtools.storage.v2'
 
 type PersistedState = {
   knowledgePoints: KnowledgePoint[]
