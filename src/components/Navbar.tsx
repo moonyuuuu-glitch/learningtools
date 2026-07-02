@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
-import { Network, BookOpen, Calendar, Search, Tags, Download, Upload, Plus } from 'lucide-react';
+import { Network, BookOpen, Calendar, Search, Tags, Download, Upload, Plus, FileText, Lightbulb } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import TagManagerModal from './TagManagerModal';
 import CategoryManagerModal from './CategoryManagerModal';
 
-export default function Navbar({ store }: { store: Store }) {
+export default function Navbar({ store, onOpenImport, onToggleInsights }: { store: Store; onOpenImport?: () => void; onToggleInsights?: () => void }) {
   const {
     viewMode,
     setViewMode,
@@ -108,6 +108,14 @@ export default function Navbar({ store }: { store: Store }) {
               : apiStatus === 'error'
                 ? 'AI 未连接'
                 : '检测 AI'}
+        </button>
+
+        {/* V2: Import + Insights */}
+        <button onClick={onOpenImport} className="nav-tool-btn" title="导入文档">
+          <FileText size={15} style={{ color: 'var(--text-secondary)' }} />
+        </button>
+        <button onClick={onToggleInsights} className="nav-tool-btn" title="AI 洞察">
+          <Lightbulb size={15} style={{ color: 'var(--text-secondary)' }} />
         </button>
 
         {/* Tools */}
