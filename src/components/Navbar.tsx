@@ -5,7 +5,19 @@ import TagManagerModal from './TagManagerModal';
 import CategoryManagerModal from './CategoryManagerModal';
 
 export default function Navbar({ store }: { store: Store }) {
-  const { viewMode, setViewMode, searchQuery, setSearchQuery, upsertTag, upsertCategory, handleExport, handleImport } = store;
+  const {
+    viewMode,
+    setViewMode,
+    searchQuery,
+    setSearchQuery,
+    upsertTag,
+    upsertCategory,
+    handleExport,
+    handleImport,
+    apiStatus,
+    apiMessage,
+    verifyApi,
+  } = store;
   const [showTagMgr, setShowTagMgr] = useState(false);
   const [showCatMgr, setShowCatMgr] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -65,6 +77,38 @@ export default function Navbar({ store }: { store: Store }) {
         </div>
 
         <div className="flex-1" />
+
+        <button
+          onClick={verifyApi}
+          className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
+          style={{
+            color:
+              apiStatus === 'ready'
+                ? '#2f855a'
+                : apiStatus === 'error'
+                  ? 'var(--accent)'
+                  : 'var(--text-secondary)',
+            background:
+              apiStatus === 'ready'
+                ? 'rgba(47,133,90,0.10)'
+                : apiStatus === 'error'
+                  ? 'var(--accent-light)'
+                  : 'var(--bg-surface)',
+            borderColor:
+              apiStatus === 'ready'
+                ? 'rgba(47,133,90,0.25)'
+                : 'var(--border-light)',
+          }}
+          title={apiMessage || '检测 AI API 状态'}
+        >
+          {apiStatus === 'checking'
+            ? 'AI 检测中'
+            : apiStatus === 'ready'
+              ? 'AI 已连接'
+              : apiStatus === 'error'
+                ? 'AI 未连接'
+                : '检测 AI'}
+        </button>
 
         {/* Tools */}
         <button onClick={() => setShowTagMgr(true)} className="nav-tool-btn" title="标签管理">

@@ -11,6 +11,7 @@
 - JSON 导入 / 导出
 - GitHub Pages 自动部署
 - 预留 AI API 接入层（推荐 Vercel Functions）
+- `learningtools-api/` Vercel Functions MVP 后端骨架
 
 ## 技术栈
 
@@ -40,7 +41,7 @@ npm run preview
 
 ## 数据存储说明
 
-当前数据保存在浏览器本地的 IndexedDB 中。
+当前数据保存在浏览器本地的 localStorage 中（MVP 阶段，后续可扩展回 IndexedDB / 云同步）。
 
 - 正常部署更新不会自动清空数据
 - 清除浏览器站点数据后会丢失
@@ -83,15 +84,32 @@ npm run preview
 VITE_API_BASE_URL=https://your-api.vercel.app
 ```
 
-推荐 API 仓库单独维护，例如：
+当前仓库内已包含一份可独立部署的 API 骨架目录：
 
-- `learningtools-api`
+- `learningtools-api/`
 
 建议首批接口：
 
 - `GET /api/health`
 - `POST /api/ai/summarize`
 - `POST /api/ai/tags`
+
+### 前端环境变量
+
+在前端部署时配置：
+
+```bash
+VITE_API_BASE_URL=https://your-learningtools-api.vercel.app
+```
+
+### 后端环境变量
+
+在 Vercel 项目中配置：
+
+```bash
+OPENAI_API_KEY=your_key
+OPENAI_MODEL=gpt-4o-mini
+```
 
 ## 后续建议
 

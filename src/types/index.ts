@@ -26,6 +26,7 @@ export interface Article {
   title: string;
   url?: string;
   summary?: string;
+  notes?: string;
   categoryId: string;       // Category.id
   tags: string[];           // Tag.id[]
   knowledgePoints: string[]; // KnowledgePoint.id[]

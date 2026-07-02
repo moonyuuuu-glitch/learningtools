@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Plus, ExternalLink, Trash2, X } from 'lucide-react';
+import { Plus, ExternalLink, Trash2, X, Sparkles } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import type { Article } from '../types';
 import { nanoid } from '../utils';
+import { summarizeContent, suggestTags } from '../api/ai';
 
 interface Props { store: Store; }
 
@@ -10,10 +11,13 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const [title, setTitle] = useState(article.title ?? '');
   const [url, setUrl] = useState(article.url ?? '');
   const [summary, setSummary] = useState(article.summary ?? '');
+  const [notes, setNotes] = useState(article.notes ?? '');
   const [categoryId, setCategoryId] = useState(article.categoryId ?? store.categories[0]?.id ?? '');
   const [selTags, setSelTags] = useState<string[]>(article.tags ?? []);
   const [selKPs, setSelKPs] = useState<string[]>(article.knowledgePoints ?? []);
   const [readDate, setReadDate] = useState(article.readDate ?? new Date().toISOString().slice(0, 10));
+  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
+  const [aiError, setAiError] = useState('');
 
   const toggleTag = (id: string) => setSelTags((p) => p.includes(id) ? p.filter((t) => t !== id) : [...p, id]);
   const toggleKP = (id: string) => setSelKPs((p) => p.includes(id) ? p.filter((k) => k !== id) : [...p, id]);
@@ -25,6 +29,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
       title: title.trim(),
       url: url.trim() || undefined,
       summary: summary.trim() || undefined,
+      notes: notes.trim() || undefined,
       categoryId,
       tags: selTags,
       knowledgePoints: selKPs,
@@ -32,6 +37,51 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
       createdAt: article.createdAt ?? Date.now(),
     });
     onClose();
+  };
+
+  const handleAiSummary = async () => {
+    if (!title.trim()) return;
+    setAiBusy('summary');
+    setAiError('');
+    try {
+      const result = await summarizeContent({
+        title,
+        content: notes.trim() || summary.trim() || title,
+      });
+      setSummary(result.summary);
+      setNotes(result.bullets.map((item) => `- ${item}`).join('\n'));
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 摘要失败');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const handleAiTags = async () => {
+    if (!title.trim()) return;
+    setAiBusy('tags');
+    setAiError('');
+    try {
+      const result = await suggestTags({
+        title,
+        content: notes.trim() || summary.trim() || title,
+      });
+      const tagNameToId = new Map(
+        Array.from(store.tagMap.values()).map((tag) => [tag.name.toLowerCase(), tag.id]),
+      );
+      const nextTags = new Set(selTags);
+      for (const suggestion of result.suggestions) {
+        const matchedTagId = tagNameToId.get(suggestion.toLowerCase());
+        if (matchedTagId) {
+          nextTags.add(matchedTagId);
+        }
+      }
+      setSelTags(Array.from(nextTags));
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 标签建议失败');
+    } finally {
+      setAiBusy(null);
+    }
   };
 
   return (
@@ -46,6 +96,28 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
           <Field label="标题 *"><input value={title} onChange={(e) => setTitle(e.target.value)} className="input-base" placeholder="文章标题" /></Field>
           <Field label="链接"><input value={url} onChange={(e) => setUrl(e.target.value)} className="input-base" placeholder="https://..." /></Field>
           <Field label="摘要"><textarea value={summary} onChange={(e) => setSummary(e.target.value)} className="input-base resize-none" rows={2} placeholder="一两句话总结…" /></Field>
+          <Field label="笔记 / 原文摘录"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base resize-none" rows={4} placeholder="可粘贴文章内容、阅读笔记，用于 AI 总结和标签建议" /></Field>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAiSummary}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+            >
+              <Sparkles size={12} />
+              {aiBusy === 'summary' ? 'AI 总结中…' : 'AI 生成摘要'}
+            </button>
+            <button
+              onClick={handleAiTags}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
+            >
+              <Sparkles size={12} />
+              {aiBusy === 'tags' ? '标签生成中…' : 'AI 标签建议'}
+            </button>
+          </div>
+          {aiError && <p className="text-[11px]" style={{ color: 'var(--accent)' }}>{aiError}</p>}
           <Field label="分类">
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input-base">
               {store.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

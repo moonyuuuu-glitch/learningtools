@@ -1,5 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db, getTagMap, getCategoryMap, saveKnowledgePoint, deleteKnowledgePoint, exportAll, importAll, seedDemo } from '../db/database';
+import {
+  listKnowledgePoints,
+  listArticles,
+  listTags,
+  listCategories,
+  getTagMap,
+  getCategoryMap,
+  saveKnowledgePoint,
+  deleteKnowledgePoint,
+  saveArticle,
+  deleteArticle,
+  saveTag,
+  deleteTag,
+  saveCategory,
+  deleteCategory,
+  exportAll,
+  importAll,
+  seedDemo,
+} from '../db/database';
+import { checkApiHealth } from '../api/ai';
 import type { KnowledgePoint, Article, Tag, Category, ViewMode } from '../types';
 
 export function useStore() {
@@ -14,13 +33,15 @@ export function useStore() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [apiStatus, setApiStatus] = useState<'idle' | 'checking' | 'ready' | 'error'>('idle');
+  const [apiMessage, setApiMessage] = useState('');
 
   const refresh = useCallback(async () => {
     const [kps, arts, tgs, cats] = await Promise.all([
-      db.knowledgePoints.orderBy('createdAt').toArray(),
-      db.articles.orderBy('readDate').reverse().toArray(),
-      db.tags.toArray(),
-      db.categories.orderBy('order').toArray(),
+      listKnowledgePoints(),
+      listArticles(),
+      listTags(),
+      listCategories(),
     ]);
     const tm = await getTagMap();
     const cm = await getCategoryMap();
@@ -36,6 +57,23 @@ export function useStore() {
     seedDemo().then(refresh);
   }, [refresh]);
 
+  const verifyApi = useCallback(async () => {
+    setApiStatus('checking');
+    setApiMessage('');
+    try {
+      const health = await checkApiHealth();
+      setApiStatus(health.ok ? 'ready' : 'error');
+      setApiMessage(health.ok ? 'AI API 已连接' : 'AI API 状态异常');
+    } catch (error) {
+      setApiStatus('error');
+      setApiMessage(error instanceof Error ? error.message : 'AI API 连接失败');
+    }
+  }, []);
+
+  useEffect(() => {
+    verifyApi();
+  }, [verifyApi]);
+
   // KnowledgePoint CRUD
   const upsertKP = useCallback(async (kp: KnowledgePoint) => {
     await saveKnowledgePoint(kp);
@@ -50,48 +88,35 @@ export function useStore() {
 
   // Article CRUD
   const upsertArticle = useCallback(async (art: Article) => {
-    await db.articles.put(art);
+    await saveArticle(art);
     await refresh();
   }, [refresh]);
 
   const removeArticle = useCallback(async (id: string) => {
-    await db.articles.delete(id);
+    await deleteArticle(id);
     if (selectedArticleId === id) setSelectedArticleId(null);
     await refresh();
   }, [refresh, selectedArticleId]);
 
   // Tag CRUD
   const upsertTag = useCallback(async (tag: Tag) => {
-    await db.tags.put(tag);
+    await saveTag(tag);
     await refresh();
   }, [refresh]);
 
   const removeTag = useCallback(async (id: string) => {
-    // remove from all kps and articles
-    const allKPs = await db.knowledgePoints.toArray();
-    for (const kp of allKPs) {
-      if (kp.tags.includes(id)) {
-        await db.knowledgePoints.update(kp.id, { tags: kp.tags.filter((t) => t !== id) });
-      }
-    }
-    const allArts = await db.articles.toArray();
-    for (const art of allArts) {
-      if (art.tags.includes(id)) {
-        await db.articles.update(art.id, { tags: art.tags.filter((t) => t !== id) });
-      }
-    }
-    await db.tags.delete(id);
+    await deleteTag(id);
     await refresh();
   }, [refresh]);
 
   // Category CRUD
   const upsertCategory = useCallback(async (cat: Category) => {
-    await db.categories.put(cat);
+    await saveCategory(cat);
     await refresh();
   }, [refresh]);
 
   const removeCategory = useCallback(async (id: string) => {
-    await db.categories.delete(id);
+    await deleteCategory(id);
     await refresh();
   }, [refresh]);
 
@@ -126,6 +151,7 @@ export function useStore() {
     upsertTag, removeTag,
     upsertCategory, removeCategory,
     handleExport, handleImport,
+    apiStatus, apiMessage, verifyApi,
     refresh,
   };
 }

@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { X, Trash2, Link2, Save } from 'lucide-react';
+import { X, Trash2, Link2, Save, Sparkles } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import type { KnowledgePoint } from '../types';
 import { nanoid } from '../utils';
+import { summarizeContent, suggestTags } from '../api/ai';
 
 interface Props { store: Store; }
 
@@ -18,6 +19,8 @@ export default function DetailPanel({ store }: Props) {
   const [linkedPoints, setLinkedPoints] = useState<string[]>([]);
   const [linkSearch, setLinkSearch] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
+  const [aiError, setAiError] = useState('');
 
   const editor = useEditor({
     extensions: [
@@ -94,6 +97,55 @@ export default function DetailPanel({ store }: Props) {
   const removeLink = (id: string) => {
     setLinkedPoints((prev) => prev.filter((l) => l !== id));
     setDirty(true);
+  };
+
+  const handleAiSummary = async () => {
+    if (!editor || !title.trim()) return;
+    setAiBusy('summary');
+    setAiError('');
+    try {
+      const plainText = editor.getText().trim();
+      const result = await summarizeContent({
+        title,
+        content: plainText || title,
+      });
+      editor.commands.setContent(
+        `<p>${result.summary}</p><ul>${result.bullets.map((item) => `<li>${item}</li>`).join('')}</ul>`,
+      );
+      setDirty(true);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 总结失败');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const handleAiTags = async () => {
+    if (!editor || !title.trim()) return;
+    setAiBusy('tags');
+    setAiError('');
+    try {
+      const result = await suggestTags({
+        title,
+        content: editor.getText().trim() || title,
+      });
+      const tagNameToId = new Map(
+        Array.from(tagMap.values()).map((tag) => [tag.name.toLowerCase(), tag.id]),
+      );
+      const nextTags = new Set(selectedTags);
+      for (const suggestion of result.suggestions) {
+        const matchedTagId = tagNameToId.get(suggestion.toLowerCase());
+        if (matchedTagId) {
+          nextTags.add(matchedTagId);
+        }
+      }
+      setSelectedTags(Array.from(nextTags));
+      setDirty(true);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 标签建议失败');
+    } finally {
+      setAiBusy(null);
+    }
   };
 
   if (!selectedKPId && !kp) {
@@ -175,6 +227,31 @@ export default function DetailPanel({ store }: Props) {
         {/* Editor */}
         <div className="px-4 pb-3">
           <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>笔记</p>
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={handleAiSummary}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+            >
+              <Sparkles size={12} />
+              {aiBusy === 'summary' ? 'AI 总结中…' : 'AI 总结'}
+            </button>
+            <button
+              onClick={handleAiTags}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
+            >
+              <Sparkles size={12} />
+              {aiBusy === 'tags' ? '标签生成中…' : 'AI 标签建议'}
+            </button>
+          </div>
+          {aiError && (
+            <p className="text-[11px] mb-2" style={{ color: 'var(--accent)' }}>
+              {aiError}
+            </p>
+          )}
           <div className="rounded-xl p-3 min-h-[140px]"
             style={{ background: 'var(--bg-input)', border: '1px solid var(--border-light)' }}>
             <EditorContent editor={editor} />
