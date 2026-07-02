@@ -4,7 +4,7 @@ import type { Store } from '../hooks/useStore';
 import TagManagerModal from './TagManagerModal';
 import CategoryManagerModal from './CategoryManagerModal';
 
-export default function Navbar({ store, onOpenImport, onToggleInsights }: { store: Store; onOpenImport?: () => void; onToggleInsights?: () => void }) {
+export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPush, onSyncPull }: { store: Store; onOpenImport?: () => void; onToggleInsights?: () => void; onSyncPush?: () => void; onSyncPull?: () => void }) {
   const {
     viewMode,
     setViewMode,
@@ -124,6 +124,12 @@ export default function Navbar({ store, onOpenImport, onToggleInsights }: { stor
         </button>
         <button onClick={() => setShowCatMgr(true)} className="nav-tool-btn" title="分类管理">
           <Plus size={15} style={{ color: 'var(--text-secondary)' }} />
+        </button>
+        <button onClick={onSyncPush} className="nav-tool-btn" title="同步到飞书">
+          <span style={{ fontSize: 14 }}>☁️</span>
+        </button>
+        <button onClick={onSyncPull} className="nav-tool-btn" title="从飞书恢复">
+          <span style={{ fontSize: 14 }}>⬇️</span>
         </button>
         <button onClick={handleExport} className="nav-tool-btn" title="导出备份">
           <Download size={15} style={{ color: 'var(--text-secondary)' }} />

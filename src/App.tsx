@@ -10,6 +10,8 @@ import ChatPanel from './components/ChatPanel';
 import ImportFlow from './components/ImportFlow';
 import InsightsPanel from './components/InsightsPanel';
 import { startBackgroundLoop, stopBackgroundLoop } from './engine/backgroundLoop';
+import { exportAll, importAll } from './db/database';
+import { pushSnapshot, pullSnapshot } from './api/sync';
 
 export default function App() {
   const store = useStore();
@@ -34,6 +36,29 @@ export default function App() {
           store={store}
           onOpenImport={() => setShowImport(true)}
           onToggleInsights={() => setShowInsights((p) => !p)}
+          onSyncPush={async () => {
+            try {
+              const data = await exportAll();
+              const r = await pushSnapshot(data);
+              alert(r.success ? `同步成功 v${r.version}` : `同步失败: ${r.error}`);
+            } catch (e: unknown) {
+              alert(`同步失败: ${e instanceof Error ? e.message : e}`);
+            }
+          }}
+          onSyncPull={async () => {
+            if (!confirm('这会覆盖本地所有数据，确定从飞书恢复？')) return;
+            try {
+              const r = await pullSnapshot();
+              if (r.success && r.payload) {
+                await importAll(r.payload as Parameters<typeof importAll>[0]);
+                window.location.reload();
+              } else {
+                alert(`恢复失败: ${r.error || '无快照'}`);
+              }
+            } catch (e: unknown) {
+              alert(`恢复失败: ${e instanceof Error ? e.message : e}`);
+            }
+          }}
         />
         <main className="flex-1 flex overflow-hidden">
           {store.viewMode === 'graph' && (
