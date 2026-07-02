@@ -127,7 +127,7 @@ export default function CalendarBoard({ store }: Props) {
                                 (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
                               }}
                             >
-                              {a.title}
+                              {a.calendarLabel || a.title}
                             </div>
                           ))}
                         </div>

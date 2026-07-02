@@ -1,4 +1,4 @@
-import type { Article, Category, Insight, KnowledgePoint, LinkSuggestion, Tag } from '../types'
+import type { Article, Category, Insight, KnowledgePoint, LinkSuggestion, Scene, Tag } from '../types'
 
 const STORAGE_KEY = 'learningtools.storage.v1'
 
@@ -7,6 +7,7 @@ type PersistedState = {
   articles: Article[]
   tags: Tag[]
   categories: Category[]
+  scenes: Scene[]
 }
 
 const DEFAULT_STATE: PersistedState = {
@@ -14,6 +15,7 @@ const DEFAULT_STATE: PersistedState = {
   articles: [],
   tags: [],
   categories: [],
+  scenes: [],
 }
 
 function readState(): PersistedState {
@@ -33,6 +35,7 @@ function readState(): PersistedState {
       articles: parsed.articles ?? [],
       tags: parsed.tags ?? [],
       categories: parsed.categories ?? [],
+      scenes: parsed.scenes ?? [],
     }
   } catch {
     return DEFAULT_STATE
@@ -247,6 +250,7 @@ export async function importAll(
     articles: data.articles ?? [],
     tags: data.tags ?? [],
     categories: data.categories ?? [],
+    scenes: (data as Record<string, unknown>).scenes as PersistedState['scenes'] ?? [],
   })
 }
 
@@ -416,7 +420,28 @@ export async function seedDemo() {
     articles,
     tags,
     categories,
+    scenes: [],
   })
+}
+
+// ─── Scene CRUD ───
+
+export async function listScenes() {
+  return [...readState().scenes]
+}
+
+export async function saveScene(scene: Scene) {
+  updateState((state) => ({
+    ...state,
+    scenes: [...state.scenes.filter((s) => s.id !== scene.id), scene],
+  }))
+}
+
+export async function deleteScene(id: string) {
+  updateState((state) => ({
+    ...state,
+    scenes: state.scenes.filter((s) => s.id !== id),
+  }))
 }
 
 // ─── V2 stubs (localStorage 版暂不支持，保持编译通过) ───

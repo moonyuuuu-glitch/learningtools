@@ -27,6 +27,7 @@ export interface Article {
   url?: string;
   summary?: string;
   notes?: string;
+  calendarLabel?: string;   // 日历看板显示文字，为空时 fallback 到 title
   categoryId: string;       // Category.id
   tags: string[];           // Tag.id[]
   knowledgePoints: string[]; // KnowledgePoint.id[]
@@ -99,6 +100,13 @@ export interface Insight {
   payload: Record<string, unknown>; // 附加数据（节点id列表等）
   status: InsightStatus;
   createdAt: number;
+}
+
+export interface Scene {
+  id: string;
+  name: string;
+  tagIds: string[];
+  color?: string;
 }
 
 export type ViewMode = 'graph' | 'articles' | 'calendar';
