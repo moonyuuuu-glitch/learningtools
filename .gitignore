@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+
+# 旧的独立 API 目录（已迁移到根 api/，保留本地不提交）
+learningtools-api/
