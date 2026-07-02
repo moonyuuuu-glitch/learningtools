@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,6 +7,7 @@ import type { Store } from '../hooks/useStore';
 import type { KnowledgePoint } from '../types';
 import { nanoid } from '../utils';
 import { summarizeContent, suggestTags } from '../api/ai';
+import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 
 interface Props { store: Store; }
 
@@ -19,8 +20,10 @@ export default function DetailPanel({ store }: Props) {
   const [linkedPoints, setLinkedPoints] = useState<string[]>([]);
   const [linkSearch, setLinkSearch] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
   const [aiError, setAiError] = useState('');
+  useBeforeUnloadWarning(dirty || isSaving, '知识点有未保存更改，刷新或关闭会丢失。');
 
   const editor = useEditor({
     extensions: [
@@ -48,25 +51,34 @@ export default function DetailPanel({ store }: Props) {
       setLinkedPoints([]);
       setDirty(false);
     }
-  }, [kp?.id, editor]);
+  }, [kp, editor]);
 
-  const handleSave = async () => {
-    if (!editor) return;
+  const saveIfNeeded = useCallback(async () => {
+    if (!editor || !kp || isSaving || !dirty) return;
+    setIsSaving(true);
     const now = Date.now();
-    const id = kp?.id ?? nanoid();
+    const id = kp.id;
     const updated: KnowledgePoint = {
       id,
       title: title.trim() || '未命名',
       content: JSON.stringify(editor.getJSON()),
-      parentId: kp?.parentId,
+      parentId: kp.parentId,
       tags: selectedTags,
       linkedPoints,
-      createdAt: kp?.createdAt ?? now,
+      createdAt: kp.createdAt ?? now,
       updatedAt: now,
     };
-    await upsertKP(updated);
-    setSelectedKPId(id);
-    setDirty(false);
+    try {
+      await upsertKP(updated);
+      setSelectedKPId(id);
+      setDirty(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [dirty, editor, isSaving, kp, linkedPoints, selectedTags, setSelectedKPId, title, upsertKP]);
+
+  const handleSave = () => {
+    void saveIfNeeded();
   };
 
   const handleNew = () => {
@@ -98,6 +110,14 @@ export default function DetailPanel({ store }: Props) {
     setLinkedPoints((prev) => prev.filter((l) => l !== id));
     setDirty(true);
   };
+
+  useEffect(() => {
+    if (!dirty || !kp) return;
+    const timer = window.setTimeout(() => {
+      void saveIfNeeded();
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [dirty, kp, saveIfNeeded]);
 
   const handleAiSummary = async () => {
     if (!editor || !title.trim()) return;
@@ -175,16 +195,19 @@ export default function DetailPanel({ store }: Props) {
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid var(--border-light)' }}>
         <span className="text-xs font-semibold flex-1" style={{ color: 'var(--text-secondary)' }}>知识点详情</span>
-        {dirty && (
-          <button onClick={handleSave} className="flex items-center gap-1 text-xs text-white px-2.5 py-1 rounded-lg font-medium"
-            style={{ background: 'var(--accent)' }}>
-            <Save size={11} /> 保存
+        {(dirty || isSaving) && (
+          <button onClick={handleSave} className="flex items-center gap-1 text-xs text-white px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+            style={{ background: 'var(--accent)' }} disabled={isSaving}>
+            <Save size={11} /> {isSaving ? '保存中…' : '保存'}
           </button>
         )}
         <button onClick={() => { if (kp) removeKP(kp.id); }} title="删除">
           <Trash2 size={14} style={{ color: 'var(--text-muted)' }} className="hover:text-red-500 transition-colors" />
         </button>
-        <button onClick={() => setSelectedKPId(null)}>
+        <button onClick={() => {
+          if (dirty && !isSaving && !window.confirm('当前知识点有未保存更改，确定要关闭吗？')) return;
+          setSelectedKPId(null);
+        }}>
           <X size={14} style={{ color: 'var(--text-muted)' }} />
         </button>
       </div>
@@ -195,7 +218,7 @@ export default function DetailPanel({ store }: Props) {
           <input
             value={title}
             onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
-            onBlur={handleSave}
+            onBlur={() => { void saveIfNeeded(); }}
             placeholder="知识点标题"
             className="w-full bg-transparent focus:outline-none text-sm font-semibold py-1"
             style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-light)' }}
