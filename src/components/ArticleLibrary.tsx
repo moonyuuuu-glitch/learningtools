@@ -1,13 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Plus, ExternalLink, Trash2, X, Sparkles } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import type { Article } from '../types';
 import { nanoid } from '../utils';
 import { summarizeContent, suggestTags } from '../api/ai';
+import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 
 interface Props { store: Store; }
 
 function ArticleForm({ article, store, onClose }: { article: Partial<Article>; store: Store; onClose: () => void }) {
+  const [articleId] = useState(article.id ?? nanoid());
+  const [createdAt] = useState(article.createdAt ?? Date.now());
   const [title, setTitle] = useState(article.title ?? '');
   const [url, setUrl] = useState(article.url ?? '');
   const [summary, setSummary] = useState(article.summary ?? '');
@@ -18,24 +21,80 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const [readDate, setReadDate] = useState(article.readDate ?? new Date().toISOString().slice(0, 10));
   const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
   const [aiError, setAiError] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const toggleTag = (id: string) => setSelTags((p) => p.includes(id) ? p.filter((t) => t !== id) : [...p, id]);
-  const toggleKP = (id: string) => setSelKPs((p) => p.includes(id) ? p.filter((k) => k !== id) : [...p, id]);
+  useBeforeUnloadWarning(dirty || isSaving, '文章有未保存更改，刷新或关闭会丢失。');
+
+  const toggleTag = (id: string) => {
+    setSelTags((p) => p.includes(id) ? p.filter((t) => t !== id) : [...p, id]);
+    setDirty(true);
+  };
+  const toggleKP = (id: string) => {
+    setSelKPs((p) => p.includes(id) ? p.filter((k) => k !== id) : [...p, id]);
+    setDirty(true);
+  };
+
+  const persist = useCallback(async (closeAfterSave = false) => {
+    const trimmedTitle = title.trim();
+    const hasInput = Boolean(
+      trimmedTitle ||
+      url.trim() ||
+      summary.trim() ||
+      notes.trim() ||
+      selTags.length > 0 ||
+      selKPs.length > 0,
+    );
+    if (!hasInput || isSaving) return;
+    setIsSaving(true);
+    try {
+      await store.upsertArticle({
+        id: articleId,
+        title: trimmedTitle || '未命名文章',
+        url: url.trim() || undefined,
+        summary: summary.trim() || undefined,
+        notes: notes.trim() || undefined,
+        categoryId,
+        tags: selTags,
+        knowledgePoints: selKPs,
+        readDate,
+        createdAt,
+      });
+      setDirty(false);
+      if (closeAfterSave) onClose();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    title,
+    url,
+    summary,
+    notes,
+    selTags,
+    selKPs,
+    isSaving,
+    store,
+    articleId,
+    categoryId,
+    readDate,
+    createdAt,
+    onClose,
+  ]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = window.setTimeout(() => {
+      void persist(false);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [dirty, persist]);
 
   const save = async () => {
-    if (!title.trim()) return;
-    await store.upsertArticle({
-      id: article.id ?? nanoid(),
-      title: title.trim(),
-      url: url.trim() || undefined,
-      summary: summary.trim() || undefined,
-      notes: notes.trim() || undefined,
-      categoryId,
-      tags: selTags,
-      knowledgePoints: selKPs,
-      readDate,
-      createdAt: article.createdAt ?? Date.now(),
-    });
+    await persist(true);
+  };
+
+  const handleClose = () => {
+    if (dirty && !isSaving && !window.confirm('当前文章有未保存更改，确定要关闭吗？')) return;
     onClose();
   };
 
@@ -50,6 +109,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
       });
       setSummary(result.summary);
       setNotes(result.bullets.map((item) => `- ${item}`).join('\n'));
+      setDirty(true);
     } catch (error) {
       setAiError(error instanceof Error ? error.message : 'AI 摘要失败');
     } finally {
@@ -77,6 +137,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         }
       }
       setSelTags(Array.from(nextTags));
+      setDirty(true);
     } catch (error) {
       setAiError(error instanceof Error ? error.message : 'AI 标签建议失败');
     } finally {
@@ -85,18 +146,18 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(59,47,47,0.25)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(59,47,47,0.25)', backdropFilter: 'blur(4px)' }} onClick={handleClose}>
       <div className="w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{article.id ? '编辑文章' : '添加文章'}</h3>
-          <button onClick={onClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
+          <button onClick={handleClose}><X size={16} style={{ color: 'var(--text-muted)' }} /></button>
         </div>
         <div className="space-y-3.5">
-          <Field label="标题 *"><input value={title} onChange={(e) => setTitle(e.target.value)} className="input-base" placeholder="文章标题" /></Field>
-          <Field label="链接"><input value={url} onChange={(e) => setUrl(e.target.value)} className="input-base" placeholder="https://..." /></Field>
-          <Field label="摘要"><textarea value={summary} onChange={(e) => setSummary(e.target.value)} className="input-base resize-none" rows={2} placeholder="一两句话总结…" /></Field>
-          <Field label="笔记 / 原文摘录"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base resize-none" rows={4} placeholder="可粘贴文章内容、阅读笔记，用于 AI 总结和标签建议" /></Field>
+          <Field label="标题 *"><input value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} className="input-base" placeholder="文章标题" /></Field>
+          <Field label="链接"><input value={url} onChange={(e) => { setUrl(e.target.value); setDirty(true); }} className="input-base" placeholder="https://..." /></Field>
+          <Field label="摘要"><textarea value={summary} onChange={(e) => { setSummary(e.target.value); setDirty(true); }} className="input-base resize-none" rows={2} placeholder="一两句话总结…" /></Field>
+          <Field label="笔记 / 原文摘录"><textarea value={notes} onChange={(e) => { setNotes(e.target.value); setDirty(true); }} className="input-base resize-none" rows={4} placeholder="可粘贴文章内容、阅读笔记，用于 AI 总结和标签建议" /></Field>
           <div className="flex items-center gap-2">
             <button
               onClick={handleAiSummary}
@@ -119,11 +180,11 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
           </div>
           {aiError && <p className="text-[11px]" style={{ color: 'var(--accent)' }}>{aiError}</p>}
           <Field label="分类">
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input-base">
+            <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setDirty(true); }} className="input-base">
               {store.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
-          <Field label="阅读日期"><input type="date" value={readDate} onChange={(e) => setReadDate(e.target.value)} className="input-base" /></Field>
+          <Field label="阅读日期"><input type="date" value={readDate} onChange={(e) => { setReadDate(e.target.value); setDirty(true); }} className="input-base" /></Field>
           <Field label="标签">
             <div className="flex flex-wrap gap-1">
               {Array.from(store.tagMap.values()).map((tag) => {
@@ -150,8 +211,8 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
           </Field>
         </div>
         <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-lg" style={{ color: 'var(--text-muted)' }}>取消</button>
-          <button onClick={save} className="text-xs text-white px-4 py-1.5 rounded-lg font-medium" style={{ background: 'var(--accent)' }}>保存</button>
+          <button onClick={handleClose} className="text-xs px-3 py-1.5 rounded-lg" style={{ color: 'var(--text-muted)' }}>取消</button>
+          <button onClick={() => { void save(); }} className="text-xs text-white px-4 py-1.5 rounded-lg font-medium disabled:opacity-60" style={{ background: 'var(--accent)' }} disabled={isSaving}>保存</button>
         </div>
       </div>
     </div>
