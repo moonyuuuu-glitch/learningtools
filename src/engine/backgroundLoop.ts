@@ -62,7 +62,7 @@ async function detectIslands() {
   const existing = await db.insights
     .where('type')
     .equals('island')
-    .and((i) => i.status === 'unread')
+    .and((i: Insight) => i.status === 'unread')
     .count()
   if (existing > 0) return
 
@@ -91,7 +91,7 @@ async function detectStaleNodes() {
   const existing = await db.insights
     .where('type')
     .equals('stale')
-    .and((i) => i.status === 'unread')
+    .and((i: Insight) => i.status === 'unread')
     .count()
   if (existing > 0) return
 
@@ -131,7 +131,7 @@ async function generateLinkSuggestions() {
       // 去重：检查是否已有相同 pair 的建议
       const exists = await db.linkSuggestions
         .filter(
-          (s) =>
+          (s: LinkSuggestion) =>
             (s.fromId === kp.id && s.toId === c.id) ||
             (s.fromId === c.id && s.toId === kp.id),
         )
@@ -167,7 +167,7 @@ async function generateReviewInsights() {
   const existing = await db.insights
     .where('type')
     .equals('gap')
-    .and((i) => i.status === 'unread')
+    .and((i: Insight) => i.status === 'unread')
     .count()
   if (existing > 0) return
 
