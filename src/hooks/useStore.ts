@@ -17,9 +17,12 @@ import {
   exportAll,
   importAll,
   seedDemo,
+  listScenes,
+  saveScene as dbSaveScene,
+  deleteScene as dbDeleteScene,
 } from '../db/database';
 import { checkApiHealth } from '../api/ai';
-import type { KnowledgePoint, Article, Tag, Category, ViewMode } from '../types';
+import type { KnowledgePoint, Article, Tag, Category, Scene, ViewMode } from '../types';
 
 export function useStore() {
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
@@ -27,6 +30,8 @@ export function useStore() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [tagMap, setTagMap] = useState<Map<string, Tag>>(new Map());
   const [categoryMap, setCategoryMap] = useState<Map<string, Category>>(new Map());
   const [selectedKPId, setSelectedKPId] = useState<string | null>(null);
@@ -37,11 +42,12 @@ export function useStore() {
   const [apiMessage, setApiMessage] = useState('');
 
   const refresh = useCallback(async () => {
-    const [kps, arts, tgs, cats] = await Promise.all([
+    const [kps, arts, tgs, cats, scs] = await Promise.all([
       listKnowledgePoints(),
       listArticles(),
       listTags(),
       listCategories(),
+      listScenes(),
     ]);
     const tm = await getTagMap();
     const cm = await getCategoryMap();
@@ -49,6 +55,7 @@ export function useStore() {
     setArticles(arts);
     setTags(tgs);
     setCategories(cats);
+    setScenes(scs);
     setTagMap(tm);
     setCategoryMap(cm);
   }, []);
@@ -73,6 +80,31 @@ export function useStore() {
   useEffect(() => {
     verifyApi();
   }, [verifyApi]);
+
+  // Scene actions
+  const activateScene = useCallback((id: string | null) => {
+    setActiveSceneId(id);
+    if (id) {
+      const scene = scenes.find((s) => s.id === id);
+      if (scene) setFilterTags(scene.tagIds);
+    } else {
+      setFilterTags([]);
+    }
+  }, [scenes]);
+
+  const upsertScene = useCallback(async (scene: Scene) => {
+    await dbSaveScene(scene);
+    await refresh();
+  }, [refresh]);
+
+  const removeScene = useCallback(async (id: string) => {
+    await dbDeleteScene(id);
+    if (activeSceneId === id) {
+      setActiveSceneId(null);
+      setFilterTags([]);
+    }
+    await refresh();
+  }, [refresh, activeSceneId]);
 
   // KnowledgePoint CRUD
   const upsertKP = useCallback(async (kp: KnowledgePoint) => {
@@ -142,6 +174,7 @@ export function useStore() {
   return {
     viewMode, setViewMode,
     knowledgePoints, articles, tags, categories, tagMap, categoryMap,
+    scenes, activeSceneId, activateScene, upsertScene, removeScene,
     selectedKPId, setSelectedKPId,
     selectedArticleId, setSelectedArticleId,
     filterTags, setFilterTags,

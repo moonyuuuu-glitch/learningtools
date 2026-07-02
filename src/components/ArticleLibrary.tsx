@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, ExternalLink, Trash2, X, Sparkles } from 'lucide-react';
+import { Plus, ExternalLink, Trash2, X, Sparkles, Link, Loader2 } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import type { Article } from '../types';
 import { nanoid } from '../utils';
@@ -19,6 +19,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const [selTags, setSelTags] = useState<string[]>(article.tags ?? []);
   const [selKPs, setSelKPs] = useState<string[]>(article.knowledgePoints ?? []);
   const [readDate, setReadDate] = useState(article.readDate ?? new Date().toISOString().slice(0, 10));
+  const [calendarLabel, setCalendarLabel] = useState(article.calendarLabel ?? '');
   const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
   const [aiError, setAiError] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -54,6 +55,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         url: url.trim() || undefined,
         summary: summary.trim() || undefined,
         notes: notes.trim() || undefined,
+        calendarLabel: calendarLabel.trim() || undefined,
         categoryId,
         tags: selTags,
         knowledgePoints: selKPs,
@@ -70,6 +72,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     url,
     summary,
     notes,
+    calendarLabel,
     selTags,
     selKPs,
     isSaving,
@@ -185,6 +188,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
             </select>
           </Field>
           <Field label="阅读日期"><input type="date" value={readDate} onChange={(e) => { setReadDate(e.target.value); setDirty(true); }} className="input-base" /></Field>
+          <Field label="日历显示文字"><input value={calendarLabel} onChange={(e) => { setCalendarLabel(e.target.value); setDirty(true); }} className="input-base" placeholder="留空则显示标题" /></Field>
           <Field label="标签">
             <div className="flex flex-wrap gap-1">
               {Array.from(store.tagMap.values()).map((tag) => {
@@ -227,6 +231,35 @@ export default function ArticleLibrary({ store }: Props) {
   const { articles, tagMap, categoryMap, filterTags, searchQuery, removeArticle } = store;
   const [filterCat, setFilterCat] = useState('');
   const [editing, setEditing] = useState<Partial<Article> | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+
+  const handleImport = async () => {
+    const trimmed = importUrl.trim();
+    if (!trimmed) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const res = await fetch(`/api/fetch-article?url=${encodeURIComponent(trimmed)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setEditing({
+        title: data.title || '',
+        url: trimmed,
+        summary: data.excerpt || '',
+        notes: (data.content ?? '').slice(0, 5000),
+        readDate: data.publishDate || new Date().toISOString().slice(0, 10),
+      });
+      setImportUrl('');
+      setShowImport(false);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = articles;
@@ -262,7 +295,35 @@ export default function ArticleLibrary({ store }: Props) {
           style={{ background: 'var(--accent)' }}>
           <Plus size={13} /> 添加文章
         </button>
+        <button onClick={() => setShowImport(!showImport)} className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg font-medium transition-colors"
+          style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}>
+          <Link size={13} /> 从链接导入
+        </button>
       </div>
+      {showImport && (
+        <div className="flex items-center gap-2 px-5 py-2" style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--bg-surface)' }}>
+          <input
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleImport(); }}
+            className="input-base flex-1"
+            placeholder="粘贴文章链接，如 https://mp.weixin.qq.com/..."
+            autoFocus
+          />
+          <button
+            onClick={() => void handleImport()}
+            disabled={importing || !importUrl.trim()}
+            className="flex items-center gap-1 text-xs text-white px-3 py-1.5 rounded-lg font-medium disabled:opacity-50"
+            style={{ background: 'var(--accent)' }}
+          >
+            {importing ? <><Loader2 size={12} className="animate-spin" /> 抓取中...</> : '抓取'}
+          </button>
+          <button onClick={() => { setShowImport(false); setImportUrl(''); setImportError(''); }} className="text-xs px-2 py-1.5" style={{ color: 'var(--text-muted)' }}>
+            <X size={14} />
+          </button>
+          {importError && <span className="text-[11px]" style={{ color: '#e74c3c' }}>{importError}</span>}
+        </div>
+      )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto px-5 py-3">
