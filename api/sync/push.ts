@@ -1,46 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const { APP_TOKEN, TABLE_ID, FEISHU_APP_ID, FEISHU_APP_SECRET, SYNC_SECRET } = process.env;
-
-async function getToken(): Promise<string> {
-  const response = await fetch(
-    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ app_id: FEISHU_APP_ID, app_secret: FEISHU_APP_SECRET }),
-    },
-  );
-  const data = await response.json();
-  if (!response.ok || !data.tenant_access_token) {
-    throw new Error(data.msg || 'Failed to get tenant_access_token');
-  }
-  return data.tenant_access_token;
-}
-
-async function listLatestRecord(token: string) {
-  const response = await fetch(
-    `https://open.feishu.cn/open-apis/bitable/v1/apps/${APP_TOKEN}/tables/${TABLE_ID}/records?page_size=1`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(data.msg || 'Failed to list records');
-  }
-  return data.data?.items?.[0];
-}
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SYNC_SECRET } = process.env;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 简单鉴权：设了 SYNC_SECRET 就必须匹配
   if (SYNC_SECRET) {
     const provided = req.headers['x-sync-secret'];
     if (provided !== SYNC_SECRET) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return res.status(500).json({ success: false, error: 'Supabase not configured' });
   }
 
   try {
@@ -49,43 +24,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ success: false, error: 'payload is required' });
     }
 
-    const token = await getToken();
-    const existing = await listLatestRecord(token);
-    const newVersion = existing ? Number(existing.fields?.version || 0) + 1 : 1;
-    const fields = {
-      snapshot_id: `snap_${Date.now()}`,
-      user_id: 'default',
-      payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
-      version: newVersion,
-      updated_at: Date.now(),
-    };
+    // 先读当前版本号
+    const selectRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/snapshots?id=eq.default&select=version`,
+      {
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      },
+    );
+    const rows = await selectRes.json();
+    const currentVersion = Array.isArray(rows) && rows.length > 0 ? Number(rows[0].version) : 0;
+    const newVersion = currentVersion + 1;
 
-    if (existing?.record_id) {
-      const updateResponse = await fetch(
-        `https://open.feishu.cn/open-apis/bitable/v1/apps/${APP_TOKEN}/tables/${TABLE_ID}/records/${existing.record_id}`,
-        {
-          method: 'PUT',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields }),
+    // upsert（有就更新，没有就插入）
+    const upsertRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/snapshots`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
         },
-      );
-      const updateData = await updateResponse.json();
-      if (!updateResponse.ok || updateData.code !== 0) {
-        throw new Error(updateData.msg || 'Failed to update record');
-      }
-    } else {
-      const createResponse = await fetch(
-        `https://open.feishu.cn/open-apis/bitable/v1/apps/${APP_TOKEN}/tables/${TABLE_ID}/records`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields }),
-        },
-      );
-      const createData = await createResponse.json();
-      if (!createResponse.ok || createData.code !== 0) {
-        throw new Error(createData.msg || 'Failed to create record');
-      }
+        body: JSON.stringify({
+          id: 'default',
+          payload,
+          version: newVersion,
+          updated_at: new Date().toISOString(),
+        }),
+      },
+    );
+
+    if (!upsertRes.ok) {
+      const errBody = await upsertRes.text();
+      throw new Error(`Supabase upsert failed (${upsertRes.status}): ${errBody}`);
     }
 
     return res.json({ success: true, version: newVersion });
