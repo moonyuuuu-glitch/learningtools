@@ -23,13 +23,7 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new ApiError(
-      'AI API 未配置。请设置 VITE_API_BASE_URL 指向你的 Vercel Functions 服务。',
-      500,
-    )
-  }
-
+  // API_BASE_URL 为空时用相对路径（同域部署，如 Vercel）
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
     headers: {

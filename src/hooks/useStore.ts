@@ -16,7 +16,6 @@ import {
   deleteCategory,
   exportAll,
   importAll,
-  seedDemo,
   listScenes,
   saveScene as dbSaveScene,
   deleteScene as dbDeleteScene,
@@ -61,7 +60,7 @@ export function useStore() {
   }, []);
 
   useEffect(() => {
-    seedDemo().then(refresh);
+    refresh();
   }, [refresh]);
 
   const verifyApi = useCallback(async () => {
