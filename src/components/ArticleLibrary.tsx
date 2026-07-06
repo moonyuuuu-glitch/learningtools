@@ -3,7 +3,8 @@ import { Plus, ExternalLink, Trash2, X, Sparkles, Link, Loader2 } from 'lucide-r
 import type { Store } from '../hooks/useStore';
 import type { Article, KnowledgePoint } from '../types';
 import { nanoid } from '../utils';
-import { summarizeContent, suggestTags } from '../api/ai';
+import { summarizeContent, suggestTags, extractConcepts } from '../api/ai';
+import { matchConcept } from '../lib/concepts';
 import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 
 interface Props { store: Store; }
@@ -71,10 +72,13 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const todayLocal = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const [readDate, setReadDate] = useState(article.readDate ?? todayLocal);
   const [calendarLabel, setCalendarLabel] = useState(article.calendarLabel ?? '');
-  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
+  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | 'concepts' | null>(null);
   const [aiError, setAiError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [conceptCandidates, setConceptCandidates] = useState<
+    { name: string; matchedId?: string; checked: boolean }[]
+  >([]);
 
   useBeforeUnloadWarning(dirty || isSaving, '文章有未保存更改，刷新或关闭会丢失。');
 
@@ -160,14 +164,6 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     onClose,
   ]);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const timer = window.setTimeout(() => {
-      void persist(false);
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [dirty, persist]);
-
   const save = async () => {
     await persist(true);
   };
@@ -242,6 +238,60 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     }
   };
 
+  const handleAiConcepts = async () => {
+    if (!title.trim()) return;
+    setAiBusy('concepts');
+    setAiError('');
+    try {
+      const result = await extractConcepts({
+        title,
+        content: notes.trim() || summary.trim() || title,
+        existingConcepts: store.knowledgePoints.map((kp) => kp.title),
+      });
+      const seen = new Set<string>();
+      const candidates: { name: string; matchedId?: string; checked: boolean }[] = [];
+      for (const raw of result.concepts) {
+        const m = matchConcept(raw, store.knowledgePoints);
+        if (!m.name) continue;
+        // 已关联的概念跳过
+        if (m.matchedId && selKPs.includes(m.matchedId)) continue;
+        const dedupeKey = (m.matchedId ?? m.name).toLowerCase();
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        candidates.push({ name: m.name, matchedId: m.matchedId, checked: true });
+      }
+      if (candidates.length === 0) {
+        setAiError('没有可添加的新概念（可能都已关联）');
+      }
+      setConceptCandidates(candidates);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 概念建议失败');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const applyConcepts = async () => {
+    const nextKPs = new Set(selKPs);
+    for (const c of conceptCandidates) {
+      if (!c.checked) continue;
+      if (c.matchedId) {
+        nextKPs.add(c.matchedId);
+      } else {
+        const now = Date.now();
+        const kp: KnowledgePoint = {
+          id: nanoid(), title: c.name, content: '', parentId: undefined,
+          tags: [], linkedPoints: [], createdAt: now, updatedAt: now,
+        };
+        await store.upsertKP(kp);
+        nextKPs.add(kp.id);
+      }
+    }
+    setSelKPs(Array.from(nextKPs));
+    setConceptCandidates([]);
+    setDirty(true);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(59,47,47,0.25)', backdropFilter: 'blur(4px)' }} onClick={handleClose}>
       <div className="w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
@@ -274,8 +324,43 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
               <Sparkles size={12} />
               {aiBusy === 'tags' ? '标签生成中…' : 'AI 标签建议'}
             </button>
+            <button
+              onClick={handleAiConcepts}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+            >
+              <Sparkles size={12} />
+              {aiBusy === 'concepts' ? '概念抽取中…' : 'AI 概念建议'}
+            </button>
           </div>
           {aiError && <p className="text-[11px]" style={{ color: 'var(--accent)' }}>{aiError}</p>}
+          {conceptCandidates.length > 0 && (
+            <div className="rounded-lg p-2.5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-light)' }}>
+              <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>本文涉及的概念（勾选后点应用）：</p>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {conceptCandidates.map((c, idx) => (
+                  <button
+                    key={`${c.name}-${idx}`}
+                    onClick={() => setConceptCandidates((prev) => prev.map((x, i) => i === idx ? { ...x, checked: !x.checked } : x))}
+                    className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium transition-all"
+                    style={{
+                      background: c.checked ? 'var(--accent)' : 'var(--bg-card)',
+                      color: c.checked ? '#fff' : 'var(--text-secondary)',
+                      border: c.checked ? 'none' : '1px solid var(--border-light)',
+                    }}
+                  >
+                    {c.checked ? '✓' : '＋'} {c.name}
+                    <span className="text-[9px] opacity-70">{c.matchedId ? '复用' : '新建'}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => void applyConcepts()} className="text-[11px] px-2.5 py-1 rounded-lg font-medium text-white" style={{ background: 'var(--accent)' }}>应用</button>
+                <button onClick={() => setConceptCandidates([])} className="text-[11px] px-2.5 py-1 rounded-lg" style={{ color: 'var(--text-muted)' }}>取消</button>
+              </div>
+            </div>
+          )}
           <Field label="分类">
             <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setDirty(true); }} className="input-base">
               {store.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

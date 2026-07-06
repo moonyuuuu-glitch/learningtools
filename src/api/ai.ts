@@ -44,6 +44,42 @@ export async function suggestTags(input: TagsInput) {
   })
 }
 
+// ─── 概念抽取 ─────────────────────────────────────
+
+export type ConceptsInput = {
+  title: string
+  content: string
+  existingConcepts?: string[]
+}
+
+export type ConceptsResponse = {
+  concepts: string[]
+}
+
+export async function extractConcepts(input: ConceptsInput) {
+  return apiRequest<ConceptsResponse>('/api/ai/concepts', {
+    method: 'POST',
+    body: input,
+  })
+}
+
+// ─── 一键整理概念（归一 + 合并建议）───────────────
+
+export type OrganizeConceptsInput = {
+  concepts: { id: string; title: string }[]
+}
+
+export type OrganizeConceptsResponse = {
+  items: { id: string; shortName: string; mergeIntoId?: string }[]
+}
+
+export async function organizeConcepts(input: OrganizeConceptsInput) {
+  return apiRequest<OrganizeConceptsResponse>('/api/ai/organize-concepts', {
+    method: 'POST',
+    body: input,
+  })
+}
+
 // ─── V2: Chat (RAG) ───────────────────────────────
 
 export type ChatInput = {

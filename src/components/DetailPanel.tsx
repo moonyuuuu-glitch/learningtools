@@ -7,6 +7,7 @@ import type { Store } from '../hooks/useStore';
 import type { KnowledgePoint } from '../types';
 import { nanoid } from '../utils';
 import { summarizeContent, suggestTags } from '../api/ai';
+import { computeGraph, neighborConcepts } from '../lib/concepts';
 import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 
 interface Props { store: Store; }
@@ -66,12 +67,13 @@ export default function DetailPanel({ store }: Props) {
 
   const kp = useMemo(() => knowledgePoints.find((k) => k.id === selectedKPId), [knowledgePoints, selectedKPId]);
   const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [linkedPoints, setLinkedPoints] = useState<string[]>([]);
   const [linkSearch, setLinkSearch] = useState('');
   const [dirty, setDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
+  const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | 'def' | null>(null);
   const [aiError, setAiError] = useState('');
   useBeforeUnloadWarning(dirty || isSaving, '知识点有未保存更改，刷新或关闭会丢失。');
 
@@ -89,6 +91,7 @@ export default function DetailPanel({ store }: Props) {
     if (!editor) return;
     if (kp) {
       setTitle(kp.title);
+      setSummary(kp.summary ?? '');
       setSelectedTags(kp.tags);
       setLinkedPoints(kp.linkedPoints);
       try { editor.commands.setContent(kp.content ? JSON.parse(kp.content) : ''); }
@@ -97,6 +100,7 @@ export default function DetailPanel({ store }: Props) {
     } else {
       editor.commands.setContent('');
       setTitle('');
+      setSummary('');
       setSelectedTags([]);
       setLinkedPoints([]);
       setDirty(false);
@@ -111,6 +115,7 @@ export default function DetailPanel({ store }: Props) {
     const updated: KnowledgePoint = {
       id,
       title: title.trim() || '未命名',
+      summary: summary.trim() || undefined,
       content: JSON.stringify(editor.getJSON()),
       parentId: kp.parentId,
       tags: selectedTags,
@@ -125,7 +130,7 @@ export default function DetailPanel({ store }: Props) {
     } finally {
       setIsSaving(false);
     }
-  }, [dirty, editor, isSaving, kp, linkedPoints, selectedTags, setSelectedKPId, title, upsertKP]);
+  }, [dirty, editor, isSaving, kp, linkedPoints, selectedTags, setSelectedKPId, summary, title, upsertKP]);
 
   const handleSave = () => {
     void saveIfNeeded();
@@ -161,13 +166,33 @@ export default function DetailPanel({ store }: Props) {
     setDirty(true);
   };
 
-  useEffect(() => {
-    if (!dirty || !kp) return;
-    const timer = window.setTimeout(() => {
-      void saveIfNeeded();
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [dirty, kp, saveIfNeeded]);
+  // 相邻概念：共现邻居 + 手动关联，按权重排序（实时派生，不落库）
+  const graph = useMemo(() => computeGraph(articles, knowledgePoints), [articles, knowledgePoints]);
+  const adjacentConcepts = useMemo(() => {
+    if (!selectedKPId) return [];
+    return neighborConcepts(selectedKPId, graph, linkedPoints)
+      .map((n) => {
+        const target = knowledgePoints.find((k) => k.id === n.id);
+        return target ? { id: n.id, title: target.title, weight: n.weight } : null;
+      })
+      .filter(Boolean) as { id: string; title: string; weight: number }[];
+  }, [selectedKPId, graph, linkedPoints, knowledgePoints]);
+
+  const handleAiDefinition = async () => {
+    if (!title.trim()) return;
+    setAiBusy('def');
+    setAiError('');
+    try {
+      const plainText = editor?.getText().trim() || title;
+      const result = await summarizeContent({ title, content: plainText });
+      setSummary(result.summary);
+      setDirty(true);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI 定义生成失败');
+    } finally {
+      setAiBusy(null);
+    }
+  };
 
   const handleAiSummary = async () => {
     if (!editor || !title.trim()) return;
@@ -286,11 +311,34 @@ export default function DetailPanel({ store }: Props) {
           <input
             value={title}
             onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
-            onBlur={() => { void saveIfNeeded(); }}
-            placeholder="知识点标题"
+            placeholder="概念短名（2~6 字）"
             className="w-full bg-transparent focus:outline-none text-sm font-semibold py-1"
             style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-light)' }}
             onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+          />
+        </div>
+
+        {/* One-line definition */}
+        <div className="px-4 pb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>一句话定义</p>
+            <button
+              onClick={handleAiDefinition}
+              disabled={aiBusy !== null}
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+            >
+              <Sparkles size={10} />
+              {aiBusy === 'def' ? '生成中…' : 'AI 生成定义'}
+            </button>
+          </div>
+          <textarea
+            value={summary}
+            onChange={(e) => { setSummary(e.target.value); setDirty(true); }}
+            placeholder="用一句话说明这个概念是什么…"
+            rows={2}
+            className="w-full rounded-xl px-3 py-2 text-xs resize-none focus:outline-none"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border-light)', color: 'var(--text-primary)' }}
           />
         </div>
 
@@ -417,6 +465,25 @@ export default function DetailPanel({ store }: Props) {
                 ↗ {a.title}
               </a>
             ))}
+          </div>
+        )}
+
+        {/* Adjacent concepts (co-occurrence + manual links) */}
+        {adjacentConcepts.length > 0 && (
+          <div className="px-4 pb-4">
+            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>相邻概念</p>
+            <div className="flex flex-wrap gap-1.5">
+              {adjacentConcepts.map((n) => (
+                <button key={n.id} onClick={() => setSelectedKPId(n.id)}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full transition-all"
+                  style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
+                  {n.title}
+                  {n.weight > 1 && <span className="text-[9px] opacity-60">×{n.weight}</span>}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

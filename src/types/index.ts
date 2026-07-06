@@ -12,8 +12,9 @@ export interface Category {
 
 export interface KnowledgePoint {
   id: string;
-  title: string;
-  content: string;          // Tiptap JSON string
+  title: string;            // 概念短名（2~6 字）
+  summary?: string;         // 一句话定义
+  content: string;          // Tiptap JSON string（长笔记）
   parentId?: string;        // optional manual hierarchy
   tags: string[];           // Tag.id[]
   linkedPoints: string[];   // explicit bidirectional links (KnowledgePoint.id[])
