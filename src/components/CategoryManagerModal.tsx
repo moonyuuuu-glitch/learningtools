@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
 import type { Category } from '../types';
 import { nanoid } from '../utils';
@@ -41,14 +41,6 @@ export default function CategoryManagerModal({ categories, onUpsert, onDelete, o
       setIsSaving(false);
     }
   }, [editing, isSaving, name, onUpsert]);
-
-  useEffect(() => {
-    if (!dirty || !editing) return;
-    const timer = window.setTimeout(() => {
-      void save();
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [dirty, editing, save]);
 
   const handleClose = () => {
     if (isSaving) return;

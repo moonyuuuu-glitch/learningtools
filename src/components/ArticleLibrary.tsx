@@ -22,6 +22,42 @@ function pickTagColor(name: string) {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 }
 
+function sanitizeSuggestion(value: string) {
+  return value.trim().replace(/^#+\s*/, '');
+}
+
+function levenshtein(a: string, b: string) {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+      else dp[i][j] = Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]) + 1;
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function findClosestTagId(
+  normalized: string,
+  tagNameToId: Map<string, string>,
+  maxDistance = 2,
+) {
+  let bestId: string | undefined;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (const [name, id] of tagNameToId.entries()) {
+    const distance = levenshtein(normalized, name);
+    if (distance <= maxDistance && distance < bestDistance) {
+      bestDistance = distance;
+      bestId = id;
+    }
+  }
+  return bestId;
+}
+
 function ArticleForm({ article, store, onClose }: { article: Partial<Article>; store: Store; onClose: () => void }) {
   const [articleId] = useState(article.id ?? nanoid());
   const [createdAt] = useState(article.createdAt ?? Date.now());
@@ -168,16 +204,23 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
       const result = await suggestTags({
         title,
         content: notes.trim() || summary.trim() || title,
+        existingTags: Array.from(store.tagMap.values()).map((tag) => tag.name),
+        relatedKnowledgePoints: store.knowledgePoints
+          .filter((kp) => selKPs.includes(kp.id))
+          .map((kp) => kp.title),
       });
       const tagNameToId = new Map(
         Array.from(store.tagMap.values()).map((tag) => [normalizeTagName(tag.name), tag.id]),
       );
       const nextTags = new Set(selTags);
       for (const rawSuggestion of result.suggestions) {
-        const suggestion = rawSuggestion.trim().replace(/^#+\s*/, '');
+        const suggestion = sanitizeSuggestion(rawSuggestion);
         if (!suggestion) continue;
         const normalized = normalizeTagName(suggestion);
         let matchedTagId = tagNameToId.get(normalized);
+        if (!matchedTagId) {
+          matchedTagId = findClosestTagId(normalized, tagNameToId);
+        }
         if (!matchedTagId) {
           const newTag = {
             id: nanoid(),

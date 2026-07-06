@@ -18,6 +18,8 @@ export type SummarizeResponse = {
 export type TagsInput = {
   title: string
   content: string
+  existingTags?: string[]
+  relatedKnowledgePoints?: string[]
 }
 
 export type TagsResponse = {
