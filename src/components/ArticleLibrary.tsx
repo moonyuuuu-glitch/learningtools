@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Plus, ExternalLink, Trash2, X, Sparkles, Link, Loader2 } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
-import type { Article } from '../types';
+import type { Article, KnowledgePoint } from '../types';
 import { nanoid } from '../utils';
 import { summarizeContent, suggestTags } from '../api/ai';
 import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
@@ -15,10 +15,11 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const [url, setUrl] = useState(article.url ?? '');
   const [summary, setSummary] = useState(article.summary ?? '');
   const [notes, setNotes] = useState(article.notes ?? '');
-  const [categoryId, setCategoryId] = useState(article.categoryId ?? store.categories[0]?.id ?? '');
+  const [categoryId, setCategoryId] = useState(article.categoryId || store.categories[0]?.id || '');
   const [selTags, setSelTags] = useState<string[]>(article.tags ?? []);
   const [selKPs, setSelKPs] = useState<string[]>(article.knowledgePoints ?? []);
-  const [readDate, setReadDate] = useState(article.readDate ?? new Date().toISOString().slice(0, 10));
+  const todayLocal = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+  const [readDate, setReadDate] = useState(article.readDate ?? todayLocal);
   const [calendarLabel, setCalendarLabel] = useState(article.calendarLabel ?? '');
   const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | null>(null);
   const [aiError, setAiError] = useState('');
@@ -26,6 +27,13 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const [isSaving, setIsSaving] = useState(false);
 
   useBeforeUnloadWarning(dirty || isSaving, '文章有未保存更改，刷新或关闭会丢失。');
+
+  // categories 可能在表单挂载后才异步加载完，此时补上默认值
+  useEffect(() => {
+    if (!categoryId && store.categories[0]?.id) {
+      setCategoryId(store.categories[0].id);
+    }
+  }, [store.categories, categoryId]);
 
   const toggleTag = (id: string) => {
     setSelTags((p) => p.includes(id) ? p.filter((t) => t !== id) : [...p, id]);
@@ -35,6 +43,24 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     setSelKPs((p) => p.includes(id) ? p.filter((k) => k !== id) : [...p, id]);
     setDirty(true);
   };
+
+  const [newKPTitle, setNewKPTitle] = useState('');
+  const [creatingKP, setCreatingKP] = useState(false);
+  const newKPRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateKP = useCallback(async () => {
+    const t = newKPTitle.trim();
+    if (!t || creatingKP) return;
+    setCreatingKP(true);
+    const now = Date.now();
+    const kp: KnowledgePoint = { id: nanoid(), title: t, content: '', parentId: undefined, tags: [], linkedPoints: [], createdAt: now, updatedAt: now };
+    await store.upsertKP(kp);
+    setSelKPs((p) => [...p, kp.id]);
+    setNewKPTitle('');
+    setDirty(true);
+    setCreatingKP(false);
+    newKPRef.current?.focus();
+  }, [newKPTitle, creatingKP, store]);
 
   const persist = useCallback(async (closeAfterSave = false) => {
     const trimmedTitle = title.trim();
@@ -202,7 +228,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
             </div>
           </Field>
           <Field label="关联知识点">
-            <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+            <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto mb-1.5">
               {store.knowledgePoints.map((kp) => {
                 const active = selKPs.includes(kp.id);
                 return <button key={kp.id} onClick={() => toggleKP(kp.id)}
@@ -211,6 +237,25 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
                   {kp.title}
                 </button>;
               })}
+            </div>
+            <div className="flex gap-1">
+              <input
+                ref={newKPRef}
+                value={newKPTitle}
+                onChange={(e) => setNewKPTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateKP(); } }}
+                placeholder="新建知识点并关联…"
+                className="input-base flex-1 text-[11px]"
+                style={{ padding: '4px 8px' }}
+              />
+              <button
+                onClick={() => void handleCreateKP()}
+                disabled={!newKPTitle.trim() || creatingKP}
+                className="text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-40 transition-colors"
+                style={{ background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0 }}
+              >
+                {creatingKP ? '…' : '+ 新建'}
+              </button>
             </div>
           </Field>
         </div>
