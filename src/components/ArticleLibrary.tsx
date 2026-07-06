@@ -243,7 +243,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
                 ref={newKPRef}
                 value={newKPTitle}
                 onChange={(e) => setNewKPTitle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateKP(); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 placeholder="新建知识点并关联…"
                 className="input-base flex-1 text-[11px]"
                 style={{ padding: '4px 8px' }}
@@ -350,7 +350,7 @@ export default function ArticleLibrary({ store }: Props) {
           <input
             value={importUrl}
             onChange={(e) => setImportUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleImport(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
             className="input-base flex-1"
             placeholder="粘贴文章链接，如 https://mp.weixin.qq.com/..."
             autoFocus
