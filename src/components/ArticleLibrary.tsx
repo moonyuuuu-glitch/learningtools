@@ -8,6 +8,20 @@ import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 
 interface Props { store: Store; }
 
+const TAG_COLORS = ['#E8A87C', '#D9534F', '#85B7A7', '#7DB8B0', '#C7A4C0', '#F0C987', '#8AACB8', '#C8B8DB', '#F4B9B2'];
+
+function normalizeTagName(value: string) {
+  return value.trim().replace(/^#+\s*/, '').toLowerCase();
+}
+
+function pickTagColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
+
 function ArticleForm({ article, store, onClose }: { article: Partial<Article>; store: Store; onClose: () => void }) {
   const [articleId] = useState(article.id ?? nanoid());
   const [createdAt] = useState(article.createdAt ?? Date.now());
@@ -156,14 +170,25 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         content: notes.trim() || summary.trim() || title,
       });
       const tagNameToId = new Map(
-        Array.from(store.tagMap.values()).map((tag) => [tag.name.toLowerCase(), tag.id]),
+        Array.from(store.tagMap.values()).map((tag) => [normalizeTagName(tag.name), tag.id]),
       );
       const nextTags = new Set(selTags);
-      for (const suggestion of result.suggestions) {
-        const matchedTagId = tagNameToId.get(suggestion.toLowerCase());
-        if (matchedTagId) {
-          nextTags.add(matchedTagId);
+      for (const rawSuggestion of result.suggestions) {
+        const suggestion = rawSuggestion.trim().replace(/^#+\s*/, '');
+        if (!suggestion) continue;
+        const normalized = normalizeTagName(suggestion);
+        let matchedTagId = tagNameToId.get(normalized);
+        if (!matchedTagId) {
+          const newTag = {
+            id: nanoid(),
+            name: suggestion,
+            color: pickTagColor(suggestion),
+          };
+          await store.upsertTag(newTag);
+          matchedTagId = newTag.id;
+          tagNameToId.set(normalized, matchedTagId);
         }
+        nextTags.add(matchedTagId);
       }
       setSelTags(Array.from(nextTags));
       setDirty(true);
