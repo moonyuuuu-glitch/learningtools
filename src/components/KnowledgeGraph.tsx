@@ -72,10 +72,7 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
   const { knowledgePoints, articles, tagMap, filterTags, selectedKPId, setSelectedKPId } = store;
   const [editingScene, setEditingScene] = useState<string | null>(null);
   const [sceneName, setSceneName] = useState('');
-  // 默认展开全部父节点，确保首屏能看到完整知识体系
-  const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(knowledgePoints.map((kp) => kp.id)),
-  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [organizing, setOrganizing] = useState(false);
   const [organizeError, setOrganizeError] = useState('');
   const [organizePlan, setOrganizePlan] = useState<
@@ -105,13 +102,11 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
     return m;
   }, [knowledgePoints]);
 
-  // 知识点变化时保持默认“全展开”
-  useEffect(() => {
-    setExpanded(new Set(knowledgePoints.map((kp) => kp.id)));
-  }, [knowledgePoints]);
-
   const { rawNodes, rawEdges } = useMemo(() => {
-    const visible = knowledgePoints;
+    // 可见节点：顶层概念(无 parentId) 或 父概念已展开的子概念
+    const visible = knowledgePoints.filter(
+      (kp) => !kp.parentId || expanded.has(kp.parentId),
+    );
     const visibleIds = new Set(visible.map((kp) => kp.id));
 
     const kpNodes: Node[] = visible.map((kp) => {
@@ -191,6 +186,11 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(rawEdges);
 
+  // 默认展开所有层级，保证首次进入可一眼看到完整知识体系
+  useEffect(() => {
+    setExpanded(new Set(knowledgePoints.map((kp) => kp.id)));
+  }, [knowledgePoints]);
+
   useEffect(() => { setNodes(layoutedNodes); }, [layoutedNodes, setNodes]);
   useEffect(() => { setEdges(rawEdges); }, [rawEdges, setEdges]);
 
@@ -198,7 +198,16 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedKPId(node.id === selectedKPId ? null : node.id);
-  }, [selectedKPId, setSelectedKPId]);
+    // 有子概念则切换展开/收起
+    if ((childCountMap.get(node.id) ?? 0) > 0) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.id)) next.delete(node.id);
+        else next.add(node.id);
+        return next;
+      });
+    }
+  }, [selectedKPId, setSelectedKPId, childCountMap]);
 
   const allTags = Array.from(store.tagMap.values());
 
@@ -332,6 +341,27 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
           })}
         </div>
       )}
+
+      <div
+        className="mx-5 mt-3 mb-1 rounded-xl px-3 py-2.5 flex items-start gap-2"
+        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-light)' }}
+      >
+        <span
+          className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+          style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+        >
+          使用说明
+        </span>
+        <div className="text-[11px] leading-5" style={{ color: 'var(--text-secondary)' }}>
+          图谱显示的是
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>知识点</span>
+          ，不是文章本身。
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>一篇文章建议关联 3~8 个知识点、2~4 个标签</span>
+          ；知识点尽量写成短概念词。想看全量图谱时，先点上方
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>清除</span>
+          ，取消标签筛选。
+        </div>
+      </div>
 
       {/* Tag filter bar */}
       <div className="flex items-center gap-2 px-5 py-2.5 flex-wrap"
