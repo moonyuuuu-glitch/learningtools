@@ -72,7 +72,10 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
   const { knowledgePoints, articles, tagMap, filterTags, selectedKPId, setSelectedKPId } = store;
   const [editingScene, setEditingScene] = useState<string | null>(null);
   const [sceneName, setSceneName] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // 默认展开全部父节点，确保首屏能看到完整知识体系
+  const [expanded, setExpanded] = useState<Set<string>>(
+    new Set(knowledgePoints.map((kp) => kp.id)),
+  );
   const [organizing, setOrganizing] = useState(false);
   const [organizeError, setOrganizeError] = useState('');
   const [organizePlan, setOrganizePlan] = useState<
@@ -102,11 +105,13 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
     return m;
   }, [knowledgePoints]);
 
+  // 知识点变化时保持默认“全展开”
+  useEffect(() => {
+    setExpanded(new Set(knowledgePoints.map((kp) => kp.id)));
+  }, [knowledgePoints]);
+
   const { rawNodes, rawEdges } = useMemo(() => {
-    // 可见节点：顶层概念(无 parentId) 或 父概念已展开的子概念
-    const visible = knowledgePoints.filter(
-      (kp) => !kp.parentId || expanded.has(kp.parentId),
-    );
+    const visible = knowledgePoints;
     const visibleIds = new Set(visible.map((kp) => kp.id));
 
     const kpNodes: Node[] = visible.map((kp) => {
@@ -193,16 +198,7 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedKPId(node.id === selectedKPId ? null : node.id);
-    // 有子概念则切换展开/收起
-    if ((childCountMap.get(node.id) ?? 0) > 0) {
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        if (next.has(node.id)) next.delete(node.id);
-        else next.add(node.id);
-        return next;
-      });
-    }
-  }, [selectedKPId, setSelectedKPId, childCountMap]);
+  }, [selectedKPId, setSelectedKPId]);
 
   const allTags = Array.from(store.tagMap.values());
 
