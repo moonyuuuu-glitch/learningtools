@@ -9,6 +9,9 @@ import CalendarBoard from './components/CalendarBoard';
 import ChatPanel from './components/ChatPanel';
 import ImportFlow from './components/ImportFlow';
 import InsightsPanel from './components/InsightsPanel';
+import AgentApprovalPanel from './components/AgentApprovalPanel';
+import AgentSettingsModal from './components/AgentSettingsModal';
+import { useAgentBridge } from './hooks/useAgentBridge';
 import { startBackgroundLoop, stopBackgroundLoop } from './engine/backgroundLoop';
 import { exportAll, importAll } from './db/database';
 import { pushSnapshot, pullSnapshot } from './api/sync';
@@ -17,6 +20,8 @@ export default function App() {
   const store = useStore();
   const [showImport, setShowImport] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [showAgent, setShowAgent] = useState(false);
+  const bridge = useAgentBridge(store);
 
   // 启动后台认知循环
   useEffect(() => {
@@ -36,6 +41,8 @@ export default function App() {
           store={store}
           onOpenImport={() => setShowImport(true)}
           onToggleInsights={() => setShowInsights((p) => !p)}
+          onOpenAgent={() => setShowAgent(true)}
+          agentPending={bridge.pendingCount}
           onSyncPush={async () => {
             try {
               const data = await exportAll();
@@ -108,6 +115,22 @@ export default function App() {
               store.refresh();
             }}
             onClose={() => setShowImport(false)}
+          />
+        )}
+
+        {/* Agent 审批浮窗 */}
+        <AgentApprovalPanel
+          proposals={bridge.proposals}
+          onApprove={bridge.approve}
+          onReject={bridge.reject}
+        />
+
+        {/* Agent 接入设置 */}
+        {showAgent && (
+          <AgentSettingsModal
+            enabled={bridge.enabled}
+            setEnabled={bridge.setEnabled}
+            onClose={() => setShowAgent(false)}
           />
         )}
       </div>

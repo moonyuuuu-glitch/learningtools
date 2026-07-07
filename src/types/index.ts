@@ -111,3 +111,31 @@ export interface Scene {
 }
 
 export type ViewMode = 'graph' | 'articles' | 'calendar';
+
+// ─── Agent 接入（MCP）───────────────────────────────
+
+/** agent 可被授予的权限范围 */
+export type AgentScope = 'read' | 'create' | 'edit' | 'delete' | 'organize' | 'sync';
+
+/** 本地保存的令牌元数据（不含明文，明文仅生成时显示一次） */
+export interface AgentTokenMeta {
+  id: string;               // token_hash 前 8 位，用于展示/吊销
+  label: string;
+  scopes: AgentScope[];
+  createdAt: number;
+  lastUsedAt?: number;
+}
+
+/** 从后端队列取到的一条 agent 请求 */
+export interface AgentRequest {
+  id: string;               // requestId
+  tool: string;             // e.g. kb.create_knowledge_point
+  scope: AgentScope;
+  params: Record<string, unknown>;
+  createdAt: number;
+}
+
+/** 写操作 → 待你审批的提案 */
+export interface AgentProposal extends AgentRequest {
+  summary: string;          // 人话描述，如「新建知识点『上下文工程』」
+}
