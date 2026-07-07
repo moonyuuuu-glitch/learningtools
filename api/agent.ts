@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseConfigured, sbSelect, sbInsert, sbUpdate, sbDelete } from '../_lib/supabase.js';
+import { supabaseConfigured, sbSelect, sbInsert, sbUpdate, sbDelete } from './_lib/supabase.js';
 import {
   verifyBearer,
   verifyWorkspace,
@@ -9,7 +9,7 @@ import {
   generateToken,
   sha256,
   type AgentScope,
-} from '../_lib/agentAuth.js';
+} from './_lib/agentAuth.js';
 
 interface QueueRow {
   id: string;
@@ -368,8 +368,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!supabaseConfigured()) {
     return res.status(500).json({ success: false, error: 'Supabase not configured' });
   }
-  const rawRoute = req.query.route;
-  const route = Array.isArray(rawRoute) ? rawRoute[0] : rawRoute;
+  const routeRaw = req.query.route;
+  const route = Array.isArray(routeRaw) ? routeRaw[0] : routeRaw;
   try {
     if (route === 'workspace') return await handleWorkspace(req, res);
     if (route === 'tokens') return await handleTokens(req, res);
