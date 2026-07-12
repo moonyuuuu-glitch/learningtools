@@ -3,7 +3,12 @@ import { nanoid } from 'nanoid'
 import { MessageSquare, Send, X, Loader2 } from 'lucide-react'
 import { chatWithContext } from '../api/ai'
 import { searchFragments } from '../engine/search'
-import { db } from '../db/database'
+import {
+  listConversations,
+  listMessages,
+  saveConversation,
+  saveMessage,
+} from '../db/database'
 import type { Conversation, Message } from '../types'
 
 interface ChatPanelProps {
@@ -30,16 +35,11 @@ export default function ChatPanel({
     ;(async () => {
       // 尝试找已有的上下文会话
       if (contextId) {
-        const existing = await db.conversations
-          .where('contextId')
-          .equals(contextId)
-          .first()
+        const existing = (await listConversations())
+          .find((conversation) => conversation.contextId === contextId)
         if (existing) {
           setConvId(existing.id)
-          const msgs = await db.messages
-            .where('conversationId')
-            .equals(existing.id)
-            .sortBy('createdAt')
+          const msgs = await listMessages(existing.id)
           setMessages(msgs)
           return
         }
@@ -51,7 +51,7 @@ export default function ChatPanel({
         contextId,
         createdAt: Date.now(),
       }
-      await db.conversations.put(conv)
+      await saveConversation(conv)
       setConvId(conv.id)
       setMessages([])
     })()
@@ -78,7 +78,7 @@ export default function ChatPanel({
     setLoading(true)
 
     try {
-      await db.messages.put(userMsg)
+      await saveMessage(userMsg)
 
       // RAG: 搜索相关片段
       const results = await searchFragments(input.trim(), 10)
@@ -103,7 +103,7 @@ export default function ChatPanel({
         createdAt: Date.now(),
       }
 
-      await db.messages.put(assistantMsg)
+      await saveMessage(assistantMsg)
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err) {
       const errorMsg: Message = {

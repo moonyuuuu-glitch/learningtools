@@ -17,16 +17,45 @@ import {
   exportAll,
   importAll,
   listScenes,
+  listFrameworks,
+  listRelations,
+  listCandidates,
+  listInteractionEvents,
+  getGraphViewState,
+  saveFramework,
+  deleteFramework,
+  saveRelation,
+  deleteRelation,
+  saveCandidate,
+  recordInteraction,
+  saveGraphViewState,
   saveScene as dbSaveScene,
   deleteScene as dbDeleteScene,
 } from '../db/database';
 import { checkApiHealth } from '../api/ai';
-import type { KnowledgePoint, Article, Tag, Category, Scene, ViewMode } from '../types';
+import type {
+  KnowledgePoint,
+  Article,
+  FrameworkCard,
+  GraphViewState,
+  InteractionEvent,
+  KnowledgeRelation,
+  ReviewCandidate,
+  Tag,
+  Category,
+  Scene,
+  ViewMode,
+} from '../types';
 
 export function useStore() {
-  const [viewMode, setViewMode] = useState<ViewMode>('graph');
+  const [viewMode, setViewMode] = useState<ViewMode>('home');
   const [knowledgePoints, setKPs] = useState<KnowledgePoint[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
+  const [frameworks, setFrameworks] = useState<FrameworkCard[]>([]);
+  const [relations, setRelations] = useState<KnowledgeRelation[]>([]);
+  const [candidates, setCandidates] = useState<ReviewCandidate[]>([]);
+  const [interactionEvents, setInteractionEvents] = useState<InteractionEvent[]>([]);
+  const [graphViewState, setGraphViewState] = useState<GraphViewState | undefined>();
   const [tags, setTags] = useState<Tag[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -34,6 +63,8 @@ export function useStore() {
   const [tagMap, setTagMap] = useState<Map<string, Tag>>(new Map());
   const [categoryMap, setCategoryMap] = useState<Map<string, Category>>(new Map());
   const [selectedKPId, setSelectedKPId] = useState<string | null>(null);
+  const [selectedFrameworkId, setSelectedFrameworkId] = useState<string | null>(null);
+  const [selectedRelationId, setSelectedRelationId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,12 +72,17 @@ export function useStore() {
   const [apiMessage, setApiMessage] = useState('');
 
   const refresh = useCallback(async () => {
-    const [kps, arts, tgs, cats, scs] = await Promise.all([
+    const [kps, arts, tgs, cats, scs, frs, rels, cands, events, savedGraphState] = await Promise.all([
       listKnowledgePoints(),
       listArticles(),
       listTags(),
       listCategories(),
       listScenes(),
+      listFrameworks(),
+      listRelations(),
+      listCandidates(),
+      listInteractionEvents(),
+      getGraphViewState(),
     ]);
     const tm = await getTagMap();
     const cm = await getCategoryMap();
@@ -55,6 +91,11 @@ export function useStore() {
     setTags(tgs);
     setCategories(cats);
     setScenes(scs);
+    setFrameworks(frs);
+    setRelations(rels);
+    setCandidates(cands);
+    setInteractionEvents(events);
+    setGraphViewState(savedGraphState);
     setTagMap(tm);
     setCategoryMap(cm);
   }, []);
@@ -129,6 +170,41 @@ export function useStore() {
     await refresh();
   }, [refresh, selectedArticleId]);
 
+  const upsertFramework = useCallback(async (framework: FrameworkCard) => {
+    await saveFramework(framework);
+    await refresh();
+  }, [refresh]);
+
+  const removeFramework = useCallback(async (id: string) => {
+    await deleteFramework(id);
+    await refresh();
+  }, [refresh]);
+
+  const upsertRelation = useCallback(async (relation: KnowledgeRelation) => {
+    await saveRelation(relation);
+    await refresh();
+  }, [refresh]);
+
+  const removeRelation = useCallback(async (id: string) => {
+    await deleteRelation(id);
+    await refresh();
+  }, [refresh]);
+
+  const upsertCandidate = useCallback(async (candidate: ReviewCandidate) => {
+    await saveCandidate(candidate);
+    await refresh();
+  }, [refresh]);
+
+  const addInteraction = useCallback(async (event: InteractionEvent) => {
+    await recordInteraction(event);
+    setInteractionEvents((previous) => [...previous, event].slice(-2000));
+  }, []);
+
+  const updateGraphViewState = useCallback(async (state: GraphViewState) => {
+    setGraphViewState(state);
+    await saveGraphViewState(state);
+  }, []);
+
   // Tag CRUD
   const upsertTag = useCallback(async (tag: Tag) => {
     await saveTag(tag);
@@ -172,14 +248,21 @@ export function useStore() {
 
   return {
     viewMode, setViewMode,
-    knowledgePoints, articles, tags, categories, tagMap, categoryMap,
+    knowledgePoints, articles, setArticles, frameworks, relations, candidates, interactionEvents,
+    graphViewState, updateGraphViewState,
+    tags, categories, tagMap, categoryMap,
     scenes, activeSceneId, activateScene, upsertScene, removeScene,
     selectedKPId, setSelectedKPId,
+    selectedFrameworkId, setSelectedFrameworkId,
+    selectedRelationId, setSelectedRelationId,
     selectedArticleId, setSelectedArticleId,
     filterTags, setFilterTags,
     searchQuery, setSearchQuery,
     upsertKP, removeKP,
     upsertArticle, removeArticle,
+    upsertFramework, removeFramework,
+    upsertRelation, removeRelation,
+    upsertCandidate, addInteraction,
     upsertTag, removeTag,
     upsertCategory, removeCategory,
     handleExport, handleImport,

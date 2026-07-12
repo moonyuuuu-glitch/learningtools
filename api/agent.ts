@@ -29,10 +29,21 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const TOOLS = [
   {
     name: 'kb.search',
-    description: '搜索知识库中的知识点与文章（返回当前浏览器本地数据的匹配结果）',
+    description: '搜索知识库中的资料、知识点与已审核框架（返回当前浏览器本地数据的匹配结果）',
     inputSchema: {
       type: 'object',
-      properties: { query: { type: 'string', description: '搜索关键词' } },
+      properties: {
+        query: { type: 'string', description: '搜索关键词' },
+        types: {
+          type: 'array',
+          items: { type: 'string', enum: ['article', 'knowledge_point', 'framework'] },
+        },
+        tagIds: { type: 'array', items: { type: 'string' } },
+        provenanceRole: {
+          type: 'string',
+          enum: ['owner_input', 'external_source', 'published_product', 'unknown'],
+        },
+      },
       required: ['query'],
     },
   },
@@ -58,7 +69,12 @@ const TOOLS = [
   },
   {
     name: 'kb.get_graph',
-    description: '获取知识图谱（节点与共现关系边）',
+    description: '获取知识图谱，区分已审核正式关系与自动弱关联信号',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'kb.list_frameworks',
+    description: '列出所有已审核框架卡片',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -105,6 +121,10 @@ const TOOLS = [
         content: { type: 'string' },
         categoryId: { type: 'string' },
         tagIds: { type: 'array', items: { type: 'string' } },
+        provenanceRole: {
+          type: 'string',
+          enum: ['owner_input', 'external_source', 'published_product', 'unknown'],
+        },
       },
       required: ['title'],
     },
@@ -120,6 +140,10 @@ const TOOLS = [
         content: { type: 'string' },
         categoryId: { type: 'string' },
         tagIds: { type: 'array', items: { type: 'string' } },
+        provenanceRole: {
+          type: 'string',
+          enum: ['owner_input', 'external_source', 'published_product', 'unknown'],
+        },
       },
       required: ['id'],
     },
@@ -136,6 +160,46 @@ const TOOLS = [
       type: 'object',
       properties: { name: { type: 'string' }, color: { type: 'string' } },
       required: ['name'],
+    },
+  },
+  {
+    name: 'kb.create_framework_candidate',
+    description: '创建框架候选，需用户在统一审核箱确认后才进入个人工具箱',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        problem: { type: 'string' },
+        steps: { type: 'array', items: { type: 'string' } },
+        useCases: { type: 'array', items: { type: 'string' } },
+        sourceArticleIds: { type: 'array', items: { type: 'string' } },
+        knowledgePointIds: { type: 'array', items: { type: 'string' } },
+        reason: { type: 'string' },
+        evidence: { type: 'string' },
+      },
+      required: ['title', 'problem', 'steps'],
+    },
+  },
+  {
+    name: 'kb.create_relation_candidate',
+    description: '创建带理由和证据的正式关系候选，需用户在统一审核箱确认',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fromType: { type: 'string', enum: ['knowledge_point', 'framework'] },
+        fromId: { type: 'string' },
+        toType: { type: 'string', enum: ['knowledge_point', 'framework'] },
+        toId: { type: 'string' },
+        relationType: {
+          type: 'string',
+          enum: ['explains', 'applies', 'prerequisite', 'contrast', 'causal', 'derived_from', 'part_of', 'related_to'],
+        },
+        reason: { type: 'string' },
+        evidence: { type: 'string' },
+        sourceArticleIds: { type: 'array', items: { type: 'string' } },
+        confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+      },
+      required: ['fromType', 'fromId', 'toType', 'toId', 'relationType', 'reason'],
     },
   },
   {

@@ -7,10 +7,12 @@ export default function AgentApprovalPanel({
   proposals,
   onApprove,
   onReject,
+  embedded = false,
 }: {
   proposals: AgentProposal[];
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  embedded?: boolean;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export default function AgentApprovalPanel({
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 w-80 rounded-xl overflow-hidden"
+      className={embedded ? 'agent-approval-embedded overflow-hidden' : 'fixed bottom-4 right-4 z-50 w-80 rounded-xl overflow-hidden'}
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }}
     >
       <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: 'var(--accent-light)', borderBottom: '1px solid var(--border-light)' }}>

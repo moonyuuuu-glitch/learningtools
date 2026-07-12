@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Plus, ExternalLink, Trash2, X, Sparkles, Link, Loader2 } from 'lucide-react';
+import { Plus, ExternalLink, Trash2, X, Sparkles, Link, Loader2, CalendarDays, List, Layers3 } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
-import type { Article, KnowledgePoint } from '../types';
+import type { Article, KnowledgePoint, ProvenanceRole } from '../types';
 import { nanoid } from '../utils';
 import { summarizeContent, suggestTags, extractConcepts } from '../api/ai';
 import { matchConcept } from '../lib/concepts';
 import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
+import CalendarBoard from './CalendarBoard';
+import { generateFrameworkCandidates } from '../engine/candidatePipeline';
 
 interface Props { store: Store; }
 
@@ -72,7 +74,11 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
   const todayLocal = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const [readDate, setReadDate] = useState(article.readDate ?? todayLocal);
   const [calendarLabel, setCalendarLabel] = useState(article.calendarLabel ?? '');
+  const [provenanceRole, setProvenanceRole] = useState<ProvenanceRole>(
+    article.provenanceRole ?? (article.url ? 'external_source' : 'owner_input'),
+  );
   const [aiBusy, setAiBusy] = useState<'summary' | 'tags' | 'concepts' | null>(null);
+  const [frameworkBusy, setFrameworkBusy] = useState(false);
   const [aiError, setAiError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -139,6 +145,8 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         categoryId,
         tags: selTags,
         knowledgePoints: selKPs,
+        provenanceRole,
+        reviewStatus: article.reviewStatus ?? 'reviewed',
         readDate,
         createdAt,
       });
@@ -161,6 +169,8 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     categoryId,
     readDate,
     createdAt,
+    provenanceRole,
+    article.reviewStatus,
     onClose,
   ]);
 
@@ -292,6 +302,32 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     setDirty(true);
   };
 
+  const handleFrameworkCandidates = async () => {
+    if (!title.trim() || frameworkBusy) return;
+    setFrameworkBusy(true);
+    setAiError('');
+    try {
+      const candidates = await generateFrameworkCandidates({
+        articleId,
+        title: title.trim(),
+        content: notes.trim() || summary.trim() || title.trim(),
+        existingFrameworks: store.frameworks,
+      });
+      for (const candidate of candidates) {
+        await store.upsertCandidate(candidate);
+      }
+      setAiError(
+        candidates.length > 0
+          ? `已送入审核箱：${candidates.length} 个框架候选`
+          : '没有识别到值得反复使用的框架',
+      );
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : '框架识别失败');
+    } finally {
+      setFrameworkBusy(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(59,47,47,0.25)', backdropFilter: 'blur(4px)' }} onClick={handleClose}>
       <div className="w-full max-w-lg rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
@@ -303,6 +339,21 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         <div className="space-y-3.5">
           <Field label="标题 *"><input value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} className="input-base" placeholder="文章标题" /></Field>
           <Field label="链接"><input value={url} onChange={(e) => { setUrl(e.target.value); setDirty(true); }} className="input-base" placeholder="https://..." /></Field>
+          <Field label="资料来源">
+            <select
+              value={provenanceRole}
+              onChange={(event) => {
+                setProvenanceRole(event.target.value as ProvenanceRole);
+                setDirty(true);
+              }}
+              className="input-base"
+            >
+              <option value="owner_input">个人原创</option>
+              <option value="external_source">外部来源</option>
+              <option value="published_product">已发布作品</option>
+              <option value="unknown">待确认来源</option>
+            </select>
+          </Field>
           <Field label="摘要"><textarea value={summary} onChange={(e) => { setSummary(e.target.value); setDirty(true); }} className="input-base resize-none" rows={2} placeholder="一两句话总结…" /></Field>
           <Field label="笔记 / 原文摘录"><textarea value={notes} onChange={(e) => { setNotes(e.target.value); setDirty(true); }} className="input-base resize-none" rows={4} placeholder="可粘贴文章内容、阅读笔记，用于 AI 总结和标签建议" /></Field>
           <div className="flex items-center gap-2">
@@ -332,6 +383,15 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
             >
               <Sparkles size={12} />
               {aiBusy === 'concepts' ? '概念抽取中…' : 'AI 概念建议'}
+            </button>
+            <button
+              onClick={() => void handleFrameworkCandidates()}
+              disabled={aiBusy !== null || frameworkBusy}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg font-medium disabled:opacity-60"
+              style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
+            >
+              <Layers3 size={12} />
+              {frameworkBusy ? '框架识别中…' : '识别实用框架'}
             </button>
           </div>
           {aiError && <p className="text-[11px]" style={{ color: 'var(--accent)' }}>{aiError}</p>}
@@ -428,6 +488,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function ArticleLibrary({ store }: Props) {
   const { articles, tagMap, categoryMap, filterTags, searchQuery, removeArticle } = store;
   const [filterCat, setFilterCat] = useState('');
+  const [provenanceFilter, setProvenanceFilter] = useState<ProvenanceRole | ''>('');
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const [editing, setEditing] = useState<Partial<Article> | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState('');
@@ -448,6 +510,7 @@ export default function ArticleLibrary({ store }: Props) {
         url: trimmed,
         summary: data.excerpt || '',
         notes: (data.content ?? '').slice(0, 5000),
+        provenanceRole: 'external_source',
         readDate: data.publishDate || new Date().toISOString().slice(0, 10),
       });
       setImportUrl('');
@@ -462,18 +525,40 @@ export default function ArticleLibrary({ store }: Props) {
   const filtered = useMemo(() => {
     let list = articles;
     if (filterCat) list = list.filter((a) => a.categoryId === filterCat);
+    if (provenanceFilter) {
+      list = list.filter((article) => (article.provenanceRole ?? 'unknown') === provenanceFilter);
+    }
     if (filterTags.length > 0) list = list.filter((a) => a.tags.some((t) => filterTags.includes(t)));
-    if (searchQuery) list = list.filter((a) => a.title.toLowerCase().includes(searchQuery.toLowerCase()) || a.summary?.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      list = list.filter((article) => [article.title, article.summary, article.notes]
+        .some((value) => value?.toLowerCase().includes(query)));
+    }
     return list;
-  }, [articles, filterCat, filterTags, searchQuery]);
+  }, [articles, filterCat, filterTags, provenanceFilter, searchQuery]);
 
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--bg-main)' }}>
+    <div className="relative flex flex-col h-full" style={{ background: 'var(--bg-main)' }}>
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: '1px solid var(--border-light)' }}>
+        <div className="mr-2">
+          <p className="eyebrow">Sources before synthesis</p>
+          <strong className="text-sm" style={{ color: 'var(--text-primary)' }}>资料库</strong>
+        </div>
         <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="input-base !w-auto">
           <option value="">全部分类</option>
           {store.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select
+          value={provenanceFilter}
+          onChange={(event) => setProvenanceFilter(event.target.value as ProvenanceRole | '')}
+          className="input-base !w-auto"
+        >
+          <option value="">全部来源</option>
+          <option value="owner_input">个人原创</option>
+          <option value="external_source">外部来源</option>
+          <option value="published_product">已发布作品</option>
+          <option value="unknown">待确认来源</option>
         </select>
         <div className="flex flex-wrap gap-1">
           {Array.from(tagMap.values()).map((tag) => {
@@ -488,10 +573,14 @@ export default function ArticleLibrary({ store }: Props) {
           })}
         </div>
         <div className="flex-1" />
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{filtered.length} 篇文章</span>
+        <div className="library-view-toggle">
+          <button data-active={view === 'list'} onClick={() => setView('list')}><List size={12} /> 列表</button>
+          <button data-active={view === 'calendar'} onClick={() => setView('calendar')}><CalendarDays size={12} /> 日历</button>
+        </div>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{filtered.length} 份资料</span>
         <button onClick={() => setEditing({})} className="flex items-center gap-1 text-xs text-white px-3 py-2 rounded-lg font-medium transition-colors"
           style={{ background: 'var(--accent)' }}>
-          <Plus size={13} /> 添加文章
+          <Plus size={13} /> 添加资料
         </button>
         <button onClick={() => setShowImport(!showImport)} className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg font-medium transition-colors"
           style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}>
@@ -523,28 +612,40 @@ export default function ArticleLibrary({ store }: Props) {
         </div>
       )}
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto px-5 py-3">
+      {view === 'calendar' ? (
+        <div className="flex-1 min-h-0">
+          <CalendarBoard store={{ ...store, articles: filtered }} />
+        </div>
+      ) : <div className="flex-1 overflow-auto px-5 py-3">
         <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', boxShadow: 'var(--shadow)' }}>
           <table className="w-full text-xs">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
-                {['标题', '分类', '标签', '关联知识点', '阅读日期', ''].map((h) => (
+                {['标题', '来源', '分类', '标签', '关联知识点', '阅读日期', ''].map((h) => (
                   <th key={h} className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-muted)', background: 'var(--bg-surface)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => (
-                <tr key={a.id} className="group" style={{ borderBottom: '1px solid var(--border-light)' }}
+          {filtered.map((a) => (
+                <tr key={a.id} className="group cursor-pointer" style={{ borderBottom: '1px solid var(--border-light)' }}
+                  onClick={() => store.setSelectedArticleId(a.id)}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                   <td className="px-4 py-3 max-w-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{a.title}</span>
-                      {a.url && <a href={a.url} target="_blank" rel="noreferrer"><ExternalLink size={10} style={{ color: 'var(--text-muted)' }} /></a>}
+                      {a.url && <a href={a.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink size={10} style={{ color: 'var(--text-muted)' }} /></a>}
                     </div>
                     {a.summary && <div className="truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{a.summary}</div>}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="provenance-badge">
+                      {a.provenanceRole === 'owner_input' && '个人原创'}
+                      {a.provenanceRole === 'external_source' && '外部来源'}
+                      {a.provenanceRole === 'published_product' && '已发布作品'}
+                      {(!a.provenanceRole || a.provenanceRole === 'unknown') && '待确认来源'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{categoryMap.get(a.categoryId)?.name ?? '-'}</td>
                   <td className="px-4 py-3">
@@ -560,7 +661,7 @@ export default function ArticleLibrary({ store }: Props) {
                       {a.knowledgePoints.map((kid) => {
                         const kp = store.knowledgePoints.find((k) => k.id === kid);
                         return kp ? (
-                          <button key={kid} onClick={() => { store.setSelectedKPId(kid); store.setViewMode('graph'); }}
+                          <button key={kid} onClick={(event) => { event.stopPropagation(); store.setSelectedKPId(kid); store.setViewMode('graph'); }}
                             className="text-[10px] px-1.5 py-0.5 rounded-md font-medium transition-colors"
                             style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>
                             {kp.title}
@@ -572,19 +673,68 @@ export default function ArticleLibrary({ store }: Props) {
                   <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{a.readDate}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditing(a)} className="p-1" style={{ color: 'var(--text-muted)' }}>✎</button>
-                      <button onClick={() => removeArticle(a.id)} className="p-1 hover:text-red-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={12} /></button>
+                      <button onClick={(event) => { event.stopPropagation(); setEditing(a); }} className="p-1" style={{ color: 'var(--text-muted)' }}>✎</button>
+                      <button onClick={(event) => { event.stopPropagation(); removeArticle(a.id); }} className="p-1 hover:text-red-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={12} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-16 text-sm" style={{ color: 'var(--text-muted)' }}>暂无文章，点击"添加文章"开始记录</td></tr>
+                <tr><td colSpan={7} className="text-center py-16 text-sm" style={{ color: 'var(--text-muted)' }}>暂无资料，点击“添加资料”开始记录</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
+
+      {store.selectedArticleId && (() => {
+        const selected = articles.find((article) => article.id === store.selectedArticleId);
+        if (!selected) return null;
+        return (
+          <div className="library-source-drawer">
+            <header>
+              <div>
+                <p className="eyebrow">来源资料</p>
+                <h2>{selected.title}</h2>
+              </div>
+              <button onClick={() => store.setSelectedArticleId(null)}><X size={15} /></button>
+            </header>
+            <div className="source-drawer-meta">
+              <span className="provenance-badge">
+                {selected.provenanceRole === 'owner_input' && '个人原创'}
+                {selected.provenanceRole === 'external_source' && '外部来源'}
+                {selected.provenanceRole === 'published_product' && '已发布作品'}
+                {(!selected.provenanceRole || selected.provenanceRole === 'unknown') && '待确认来源'}
+              </span>
+              <span>{selected.readDate}</span>
+            </div>
+            {selected.summary && <p className="source-drawer-summary">{selected.summary}</p>}
+            {selected.notes && <pre>{selected.notes}</pre>}
+            <section>
+              <h3>关联知识</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {selected.knowledgePoints.map((id) => {
+                  const point = store.knowledgePoints.find((item) => item.id === id);
+                  if (!point) return null;
+                  return (
+                    <button
+                      key={id}
+                      className="quiet-action"
+                      onClick={() => {
+                        store.setSelectedKPId(id);
+                        store.setSelectedArticleId(null);
+                        store.setViewMode('graph');
+                      }}
+                    >
+                      {point.title}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        );
+      })()}
 
       {editing !== null && <ArticleForm article={editing} store={store} onClose={() => setEditing(null)} />}
     </div>

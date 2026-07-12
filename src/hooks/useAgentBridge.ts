@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Store } from './useStore';
-import type { AgentProposal, AgentRequest, KnowledgePoint, Article, Tag } from '../types';
+import type {
+  AgentProposal,
+  AgentRequest,
+  Article,
+  KnowledgePoint,
+  ProvenanceRole,
+  ReviewCandidate,
+  Tag,
+} from '../types';
 import { nanoid } from '../utils';
 import { registerWorkspace, pollRequests, respondRequest, listTokens } from '../api/agent';
 import { TOOL_SCOPE } from '../lib/agentScopes';
@@ -22,8 +30,19 @@ function runRead(store: Store, req: AgentRequest): { ok: boolean; data?: unknown
         .map((k) => ({ id: k.id, title: k.title, summary: k.summary }));
       const arts = store.articles
         .filter((a) => a.title.toLowerCase().includes(q) || (a.summary || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q))
-        .map((a) => ({ id: a.id, title: a.title, summary: a.summary }));
-      return { ok: true, data: { knowledgePoints: kps, articles: arts } };
+        .map((a) => ({ id: a.id, title: a.title, summary: a.summary, provenanceRole: a.provenanceRole }));
+      const frameworks = store.frameworks
+        .filter((framework) =>
+          framework.reviewStatus === 'reviewed'
+          && [framework.title, framework.problem, ...framework.steps]
+            .some((value) => value.toLowerCase().includes(q)))
+        .map((framework) => ({
+          id: framework.id,
+          title: framework.title,
+          problem: framework.problem,
+          steps: framework.steps,
+        }));
+      return { ok: true, data: { knowledgePoints: kps, articles: arts, frameworks } };
     }
     case 'kb.list_knowledge_points':
       return {
@@ -39,19 +58,52 @@ function runRead(store: Store, req: AgentRequest): { ok: boolean; data?: unknown
         ok: true,
         data: store.articles.map((a) => ({ id: a.id, title: a.title, summary: a.summary, categoryId: a.categoryId, tags: a.tags, readDate: a.readDate })),
       };
+    case 'kb.list_frameworks':
+      return {
+        ok: true,
+        data: store.frameworks
+          .filter((framework) => framework.reviewStatus === 'reviewed')
+          .map((framework) => ({
+            id: framework.id,
+            title: framework.title,
+            problem: framework.problem,
+            steps: framework.steps,
+            useCases: framework.useCases,
+            sourceArticleIds: framework.sourceArticleIds,
+          })),
+      };
     case 'kb.list_tags':
       return { ok: true, data: store.tags.map((t) => ({ id: t.id, name: t.name, color: t.color })) };
     case 'kb.get_graph': {
-      const nodes = store.knowledgePoints.map((k) => ({ id: k.id, title: k.title }));
-      const edges: Array<{ from: string; to: string }> = [];
+      const nodes = [
+        ...store.knowledgePoints.map((k) => ({ id: k.id, type: 'knowledge_point', title: k.title })),
+        ...store.frameworks
+          .filter((framework) => framework.reviewStatus === 'reviewed')
+          .map((framework) => ({ id: framework.id, type: 'framework', title: framework.title })),
+      ];
+      const weakSignals: Array<{ from: string; to: string; reason: string }> = [];
       const seen = new Set<string>();
-      for (const k of store.knowledgePoints) {
-        for (const to of k.linkedPoints) {
-          const key = [k.id, to].sort().join('|');
-          if (!seen.has(key)) { seen.add(key); edges.push({ from: k.id, to }); }
+      for (const article of store.articles) {
+        for (let i = 0; i < article.knowledgePoints.length; i += 1) {
+          for (let j = i + 1; j < article.knowledgePoints.length; j += 1) {
+            const from = article.knowledgePoints[i];
+            const to = article.knowledgePoints[j];
+            const key = [from, to].sort().join('|');
+            if (!seen.has(key)) {
+              seen.add(key);
+              weakSignals.push({ from, to, reason: 'article_cooccurrence' });
+            }
+          }
         }
       }
-      return { ok: true, data: { nodes, edges } };
+      return {
+        ok: true,
+        data: {
+          nodes,
+          formalRelations: store.relations,
+          weakSignals,
+        },
+      };
     }
     default:
       return { ok: false, error: `unsupported read tool ${req.tool}` };
@@ -107,6 +159,10 @@ async function runWrite(store: Store, req: AgentRequest): Promise<{ ok: boolean;
           categoryId: catId,
           tags: Array.isArray(p.tagIds) ? (p.tagIds as string[]) : [],
           knowledgePoints: [],
+          provenanceRole: p.provenanceRole
+            ? String(p.provenanceRole) as ProvenanceRole
+            : 'unknown',
+          reviewStatus: 'reviewed',
           readDate: new Date().toISOString().slice(0, 10),
           createdAt: now,
         };
@@ -123,6 +179,9 @@ async function runWrite(store: Store, req: AgentRequest): Promise<{ ok: boolean;
           notes: p.content !== undefined ? String(p.content) : existing.notes,
           categoryId: p.categoryId !== undefined ? String(p.categoryId) : existing.categoryId,
           tags: Array.isArray(p.tagIds) ? (p.tagIds as string[]) : existing.tags,
+          provenanceRole: p.provenanceRole !== undefined
+            ? String(p.provenanceRole) as ProvenanceRole
+            : existing.provenanceRole,
         };
         await store.upsertArticle(updated);
         return { ok: true, data: { id: updated.id } };
@@ -140,6 +199,53 @@ async function runWrite(store: Store, req: AgentRequest): Promise<{ ok: boolean;
         };
         await store.upsertTag(tag);
         return { ok: true, data: { id: tag.id, name: tag.name } };
+      }
+      case 'kb.create_framework_candidate': {
+        const candidate: ReviewCandidate = {
+          id: nanoid(),
+          type: 'framework',
+          title: String(p.title || '未命名框架'),
+          summary: String(p.reason || p.problem || ''),
+          payload: {
+            title: String(p.title || '未命名框架'),
+            problem: String(p.problem || ''),
+            steps: Array.isArray(p.steps) ? p.steps : [],
+            useCases: Array.isArray(p.useCases) ? p.useCases : [],
+            sourceArticleIds: Array.isArray(p.sourceArticleIds) ? p.sourceArticleIds : [],
+            knowledgePointIds: Array.isArray(p.knowledgePointIds) ? p.knowledgePointIds : [],
+          },
+          sourceArticleIds: Array.isArray(p.sourceArticleIds) ? p.sourceArticleIds as string[] : [],
+          evidence: String(p.evidence || ''),
+          status: 'pending',
+          createdAt: now,
+        };
+        await store.upsertCandidate(candidate);
+        return { ok: true, data: { id: candidate.id, status: candidate.status } };
+      }
+      case 'kb.create_relation_candidate': {
+        const candidate: ReviewCandidate = {
+          id: nanoid(),
+          type: 'relation',
+          title: `${String(p.fromId || '')} → ${String(p.toId || '')}`,
+          summary: String(p.reason || ''),
+          payload: {
+            fromType: p.fromType,
+            fromId: p.fromId,
+            toType: p.toType,
+            toId: p.toId,
+            type: p.relationType,
+            reason: p.reason,
+            evidence: p.evidence,
+            sourceArticleIds: Array.isArray(p.sourceArticleIds) ? p.sourceArticleIds : [],
+            confidence: p.confidence || 'medium',
+          },
+          sourceArticleIds: Array.isArray(p.sourceArticleIds) ? p.sourceArticleIds as string[] : [],
+          evidence: String(p.evidence || ''),
+          status: 'pending',
+          createdAt: now,
+        };
+        await store.upsertCandidate(candidate);
+        return { ok: true, data: { id: candidate.id, status: candidate.status } };
       }
       case 'kb.organize_concepts': {
         const sourceIds = Array.isArray(p.sourceIds) ? (p.sourceIds as string[]) : [];
@@ -199,6 +305,8 @@ function summarize(store: Store, req: AgentRequest): string {
     case 'kb.update_article': return `编辑文章「${artTitle(p.id)}」`;
     case 'kb.delete_article': return `删除文章「${artTitle(p.id)}」`;
     case 'kb.create_tag': return `新建标签「${p.name}」`;
+    case 'kb.create_framework_candidate': return `提交框架候选「${p.title}」到审核箱`;
+    case 'kb.create_relation_candidate': return `提交正式关系候选「${p.fromId} → ${p.toId}」到审核箱`;
     case 'kb.organize_concepts': {
       const ids = Array.isArray(p.sourceIds) ? (p.sourceIds as string[]) : [];
       return `整理/合并 ${ids.length} 个概念${p.targetTitle ? ` → 「${p.targetTitle}」` : ''}`;

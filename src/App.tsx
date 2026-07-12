@@ -3,13 +3,12 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { useStore } from './hooks/useStore';
 import Navbar from './components/Navbar';
 import KnowledgeGraph from './components/KnowledgeGraph';
-import DetailPanel from './components/DetailPanel';
 import ArticleLibrary from './components/ArticleLibrary';
-import CalendarBoard from './components/CalendarBoard';
 import ChatPanel from './components/ChatPanel';
 import ImportFlow from './components/ImportFlow';
-import InsightsPanel from './components/InsightsPanel';
-import AgentApprovalPanel from './components/AgentApprovalPanel';
+import HomeWorkspace from './components/HomeWorkspace';
+import GraphDetailPanel from './components/GraphDetailPanel';
+import ReviewInbox from './components/ReviewInbox';
 import AgentSettingsModal from './components/AgentSettingsModal';
 import { useAgentBridge } from './hooks/useAgentBridge';
 import { startBackgroundLoop, stopBackgroundLoop } from './engine/backgroundLoop';
@@ -19,7 +18,6 @@ import { pushSnapshot, pullSnapshot } from './api/sync';
 export default function App() {
   const store = useStore();
   const [showImport, setShowImport] = useState(false);
-  const [showInsights, setShowInsights] = useState(false);
   const [showAgent, setShowAgent] = useState(false);
   const bridge = useAgentBridge(store);
 
@@ -29,10 +27,19 @@ export default function App() {
     return () => stopBackgroundLoop();
   }, []);
 
-  // 获取当前选中 KP 的上下文信息
   const selectedKP = store.knowledgePoints.find(
     (kp) => kp.id === store.selectedKPId,
   );
+  const selectedArticle = store.articles.find(
+    (article) => article.id === store.selectedArticleId,
+  );
+  const chatContextType = selectedKP
+    ? 'kp'
+    : selectedArticle
+      ? 'article'
+      : 'global';
+  const chatContextId = selectedKP?.id ?? selectedArticle?.id;
+  const chatContextTitle = selectedKP?.title ?? selectedArticle?.title;
 
   return (
     <ReactFlowProvider>
@@ -40,7 +47,7 @@ export default function App() {
         <Navbar
           store={store}
           onOpenImport={() => setShowImport(true)}
-          onToggleInsights={() => setShowInsights((p) => !p)}
+          onToggleInsights={() => store.setViewMode('review')}
           onOpenAgent={() => setShowAgent(true)}
           agentPending={bridge.pendingCount}
           onSyncPush={async () => {
@@ -67,24 +74,16 @@ export default function App() {
             }
           }}
         />
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex overflow-hidden app-main">
+          {store.viewMode === 'home' && (
+            <HomeWorkspace store={store} />
+          )}
           {store.viewMode === 'graph' && (
             <>
               <div className="flex-1 overflow-hidden">
                 <KnowledgeGraph store={store} />
               </div>
-              {showInsights ? (
-                <div className="w-80 border-l border-[#d5cdbc] bg-[#faf8f4]">
-                  <InsightsPanel
-                    onNavigateToKP={(id) => {
-                      store.setSelectedKPId(id);
-                      setShowInsights(false);
-                    }}
-                  />
-                </div>
-              ) : (
-                <DetailPanel store={store} />
-              )}
+              <GraphDetailPanel store={store} />
             </>
           )}
           {store.viewMode === 'articles' && (
@@ -92,18 +91,21 @@ export default function App() {
               <ArticleLibrary store={store} />
             </div>
           )}
-          {store.viewMode === 'calendar' && (
-            <div className="flex-1 overflow-hidden">
-              <CalendarBoard store={store} />
-            </div>
+          {store.viewMode === 'review' && (
+            <ReviewInbox
+              store={store}
+              agentProposals={bridge.proposals}
+              onApproveAgent={bridge.approve}
+              onRejectAgent={bridge.reject}
+            />
           )}
         </main>
 
         {/* AI 聊天浮窗 */}
         <ChatPanel
-          contextType={selectedKP ? 'kp' : 'global'}
-          contextId={selectedKP?.id}
-          contextTitle={selectedKP?.title}
+          contextType={chatContextType}
+          contextId={chatContextId}
+          contextTitle={chatContextTitle}
         />
 
         {/* 导入弹窗 */}
@@ -117,13 +119,6 @@ export default function App() {
             onClose={() => setShowImport(false)}
           />
         )}
-
-        {/* Agent 审批浮窗 */}
-        <AgentApprovalPanel
-          proposals={bridge.proposals}
-          onApprove={bridge.approve}
-          onReject={bridge.reject}
-        />
 
         {/* Agent 接入设置 */}
         {showAgent && (

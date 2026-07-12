@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Network, BookOpen, Calendar, Search, Tags, Download, Upload, Plus, FileText, Lightbulb, Bot } from 'lucide-react';
+import { Home, Network, Library, Inbox, Search, Tags, Download, Upload, Plus, FileText, Lightbulb, Bot } from 'lucide-react';
 import type { Store } from '../hooks/useStore';
 import TagManagerModal from './TagManagerModal';
 import CategoryManagerModal from './CategoryManagerModal';
@@ -23,9 +23,10 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
   const fileRef = useRef<HTMLInputElement>(null);
 
   const navItems = [
-    { id: 'graph', label: '知识图谱', icon: Network },
-    { id: 'articles', label: '文章库', icon: BookOpen },
-    { id: 'calendar', label: '日历看板', icon: Calendar },
+    { id: 'home', label: '首页', icon: Home },
+    { id: 'graph', label: '图谱', icon: Network },
+    { id: 'articles', label: '资料库', icon: Library },
+    { id: 'review', label: '审核箱', icon: Inbox },
   ] as const;
 
   return (
@@ -35,8 +36,8 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
         {/* Logo */}
         <div className="flex items-center gap-2 mr-4 shrink-0">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold"
-            style={{ background: 'var(--accent)' }}>K</div>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>KnowledgeBase</span>
+            style={{ background: 'var(--accent)' }}>V</div>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Verdent Study</span>
         </div>
 
         {/* View toggle */}
@@ -64,7 +65,7 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索知识点/文章…"
+            placeholder="搜索资料、知识点或框架…"
             className="w-full rounded-lg pl-7 pr-3 py-1.5 text-xs focus:outline-none transition-all"
             style={{
               background: 'var(--bg-surface)',

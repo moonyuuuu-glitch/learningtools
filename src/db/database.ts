@@ -1,21 +1,59 @@
-import type { Article, Category, Insight, KnowledgePoint, LinkSuggestion, Scene, Tag } from '../types'
+import type {
+  Article,
+  Category,
+  Conversation,
+  Fragment,
+  FrameworkCard,
+  GraphViewState,
+  Insight,
+  InteractionEvent,
+  KnowledgePoint,
+  KnowledgeRelation,
+  LinkSuggestion,
+  Message,
+  ReviewCandidate,
+  Scene,
+  Tag,
+} from '../types'
 
 const STORAGE_KEY = 'learningtools.storage.v2'
+const STORAGE_KEY_V3 = 'learningtools.storage.v3'
 
-type PersistedState = {
+export type PersistedState = {
+  schemaVersion: 3
   knowledgePoints: KnowledgePoint[]
   articles: Article[]
   tags: Tag[]
   categories: Category[]
   scenes: Scene[]
+  frameworks: FrameworkCard[]
+  relations: KnowledgeRelation[]
+  candidates: ReviewCandidate[]
+  interactionEvents: InteractionEvent[]
+  fragments: Fragment[]
+  conversations: Conversation[]
+  messages: Message[]
+  insights: Insight[]
+  linkSuggestions: LinkSuggestion[]
+  graphViewState?: GraphViewState
 }
 
 const DEFAULT_STATE: PersistedState = {
+  schemaVersion: 3,
   knowledgePoints: [],
   articles: [],
   tags: [],
   categories: [],
   scenes: [],
+  frameworks: [],
+  relations: [],
+  candidates: [],
+  interactionEvents: [],
+  fragments: [],
+  conversations: [],
+  messages: [],
+  insights: [],
+  linkSuggestions: [],
 }
 
 function readState(): PersistedState {
@@ -23,20 +61,39 @@ function readState(): PersistedState {
     return DEFAULT_STATE
   }
 
-  const raw = window.localStorage.getItem(STORAGE_KEY)
+  const raw = window.localStorage.getItem(STORAGE_KEY_V3)
+    ?? window.localStorage.getItem(STORAGE_KEY)
   if (!raw) {
     return DEFAULT_STATE
   }
 
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedState>
-    return {
+    const migrated: PersistedState = {
+      schemaVersion: 3,
       knowledgePoints: parsed.knowledgePoints ?? [],
-      articles: parsed.articles ?? [],
+      articles: (parsed.articles ?? []).map((article) => ({
+        ...article,
+        provenanceRole: article.provenanceRole ?? 'unknown',
+        reviewStatus: article.reviewStatus ?? 'reviewed',
+        updatedAt: article.updatedAt ?? article.createdAt,
+      })),
       tags: parsed.tags ?? [],
       categories: parsed.categories ?? [],
       scenes: parsed.scenes ?? [],
+      frameworks: parsed.frameworks ?? [],
+      relations: parsed.relations ?? migrateLinkedRelations(parsed.knowledgePoints ?? []),
+      candidates: parsed.candidates ?? [],
+      interactionEvents: parsed.interactionEvents ?? [],
+      fragments: parsed.fragments ?? [],
+      conversations: parsed.conversations ?? [],
+      messages: parsed.messages ?? [],
+      insights: parsed.insights ?? [],
+      linkSuggestions: parsed.linkSuggestions ?? [],
+      graphViewState: parsed.graphViewState,
     }
+    if (!window.localStorage.getItem(STORAGE_KEY_V3)) writeState(migrated)
+    return migrated
   } catch {
     return DEFAULT_STATE
   }
@@ -47,7 +104,37 @@ function writeState(state: PersistedState) {
     return
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  window.localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(state))
+}
+
+function migrateLinkedRelations(points: KnowledgePoint[]): KnowledgeRelation[] {
+  const now = Date.now()
+  const seen = new Set<string>()
+  const relations: KnowledgeRelation[] = []
+  for (const point of points) {
+    for (const targetId of point.linkedPoints ?? []) {
+      const key = [point.id, targetId].sort().join('|')
+      if (seen.has(key) || !points.some((item) => item.id === targetId)) continue
+      seen.add(key)
+      relations.push({
+        id: `migrated-${key}`,
+        fromType: 'knowledge_point',
+        fromId: point.id,
+        toType: 'knowledge_point',
+        toId: targetId,
+        type: 'related_to',
+        reason: '由旧版无类型关联迁移，等待补充语义',
+        evidence: '',
+        sourceArticleIds: [],
+        sourceHashes: {},
+        confidence: 'low',
+        reviewStatus: 'needs_review',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+  }
+  return relations
 }
 
 function updateState(
@@ -123,6 +210,44 @@ export async function listCategories() {
   return sortCategories(readState().categories)
 }
 
+export async function listFrameworks() {
+  return [...readState().frameworks]
+    .filter((item) => item.reviewStatus !== 'archived')
+    .sort((left, right) => right.score - left.score)
+}
+
+export async function listRelations() {
+  return [...readState().relations]
+}
+
+export async function listCandidates(status?: ReviewCandidate['status']) {
+  const items = readState().candidates
+  return status ? items.filter((item) => item.status === status) : [...items]
+}
+
+export async function listInteractionEvents() {
+  return [...readState().interactionEvents]
+}
+
+export async function listFragments() {
+  return [...readState().fragments]
+}
+
+export async function listConversations() {
+  return [...readState().conversations]
+}
+
+export async function listMessages(conversationId?: string) {
+  const items = readState().messages
+  return items
+    .filter((item) => !conversationId || item.conversationId === conversationId)
+    .sort((left, right) => left.createdAt - right.createdAt)
+}
+
+export async function getGraphViewState() {
+  return readState().graphViewState
+}
+
 export async function getTagMap(): Promise<Map<string, Tag>> {
   const tags = await listTags()
   return new Map(tags.map((tag) => [tag.id, tag]))
@@ -177,12 +302,130 @@ export async function deleteKnowledgePoint(id: string) {
 }
 
 export async function saveArticle(article: Article) {
+  const nextArticle = {
+    ...article,
+    provenanceRole: article.provenanceRole ?? 'unknown',
+    reviewStatus: article.reviewStatus ?? 'reviewed',
+    sourceHash: hashSource(article),
+    updatedAt: Date.now(),
+  }
   updateState((state) => ({
     ...state,
     articles: sortArticles([
       ...state.articles.filter((item) => item.id !== article.id),
-      article,
+      nextArticle,
     ]),
+    relations: state.relations.map((relation) => {
+      if (!relation.sourceArticleIds.includes(article.id)) return relation
+      const recordedHash = relation.sourceHashes[article.id]
+      if (!recordedHash || recordedHash === nextArticle.sourceHash) return relation
+      return {
+        ...relation,
+        reviewStatus: 'needs_review' as const,
+        updatedAt: Date.now(),
+      }
+    }),
+  }))
+}
+
+function hashSource(article: Pick<Article, 'title' | 'summary' | 'notes' | 'url'>) {
+  const value = [article.title, article.summary, article.notes, article.url].join('\u0000')
+  let hash = 2166136261
+  for (const character of value) {
+    hash ^= character.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+export async function saveFramework(framework: FrameworkCard) {
+  updateState((state) => ({
+    ...state,
+    frameworks: [
+      ...state.frameworks.filter((item) => item.id !== framework.id),
+      { ...framework, updatedAt: Date.now() },
+    ],
+  }))
+}
+
+export async function deleteFramework(id: string) {
+  updateState((state) => ({
+    ...state,
+    frameworks: state.frameworks.filter((item) => item.id !== id),
+    relations: state.relations.filter((relation) =>
+      !((relation.fromType === 'framework' && relation.fromId === id)
+        || (relation.toType === 'framework' && relation.toId === id))),
+  }))
+}
+
+export async function saveRelation(relation: KnowledgeRelation) {
+  updateState((state) => ({
+    ...state,
+    relations: [
+      ...state.relations.filter((item) => item.id !== relation.id),
+      { ...relation, updatedAt: Date.now() },
+    ],
+  }))
+}
+
+export async function deleteRelation(id: string) {
+  updateState((state) => ({
+    ...state,
+    relations: state.relations.filter((item) => item.id !== id),
+  }))
+}
+
+export async function saveCandidate(candidate: ReviewCandidate) {
+  updateState((state) => ({
+    ...state,
+    candidates: [
+      ...state.candidates.filter((item) => item.id !== candidate.id),
+      candidate,
+    ],
+  }))
+}
+
+export async function saveCandidates(candidates: ReviewCandidate[]) {
+  updateState((state) => {
+    const ids = new Set(candidates.map((item) => item.id))
+    return {
+      ...state,
+      candidates: [
+        ...state.candidates.filter((item) => !ids.has(item.id)),
+        ...candidates,
+      ],
+    }
+  })
+}
+
+export async function recordInteraction(event: InteractionEvent) {
+  updateState((state) => ({
+    ...state,
+    interactionEvents: [...state.interactionEvents, event].slice(-2000),
+  }))
+}
+
+export async function saveGraphViewState(graphViewState: GraphViewState) {
+  updateState((state) => ({ ...state, graphViewState }))
+}
+
+export async function saveConversation(conversation: Conversation) {
+  updateState((state) => ({
+    ...state,
+    conversations: [
+      ...state.conversations.filter((item) => item.id !== conversation.id),
+      conversation,
+    ],
+  }))
+}
+
+export async function saveMessage(message: Message) {
+  updateState((state) => ({
+    ...state,
+    messages: [
+      ...state.messages.filter((item) => item.id !== message.id),
+      message,
+    ],
   }))
 }
 
@@ -245,12 +488,29 @@ export async function exportAll() {
 export async function importAll(
   data: ReturnType<typeof exportAll> extends Promise<infer T> ? T : never,
 ) {
+  const incoming = data as Partial<PersistedState>
   writeState({
+    schemaVersion: 3,
     knowledgePoints: data.knowledgePoints ?? [],
-    articles: data.articles ?? [],
+    articles: (data.articles ?? []).map((article) => ({
+      ...article,
+      provenanceRole: article.provenanceRole ?? 'unknown',
+      reviewStatus: article.reviewStatus ?? 'reviewed',
+      updatedAt: article.updatedAt ?? article.createdAt,
+    })),
     tags: data.tags ?? [],
     categories: data.categories ?? [],
     scenes: (data as Record<string, unknown>).scenes as PersistedState['scenes'] ?? [],
+    frameworks: incoming.frameworks ?? [],
+    relations: incoming.relations ?? migrateLinkedRelations(data.knowledgePoints ?? []),
+    candidates: incoming.candidates ?? [],
+    interactionEvents: incoming.interactionEvents ?? [],
+    fragments: incoming.fragments ?? [],
+    conversations: incoming.conversations ?? [],
+    messages: incoming.messages ?? [],
+    insights: incoming.insights ?? [],
+    linkSuggestions: incoming.linkSuggestions ?? [],
+    graphViewState: incoming.graphViewState,
   })
 }
 
@@ -416,11 +676,21 @@ export async function seedDemo() {
   ]
 
   writeState({
+    schemaVersion: 3,
     knowledgePoints,
     articles,
     tags,
     categories,
     scenes: [],
+    frameworks: [],
+    relations: migrateLinkedRelations(knowledgePoints),
+    candidates: [],
+    interactionEvents: [],
+    fragments: [],
+    conversations: [],
+    messages: [],
+    insights: [],
+    linkSuggestions: [],
   })
 }
 
@@ -444,13 +714,52 @@ export async function deleteScene(id: string) {
   }))
 }
 
-// ─── V2 stubs (localStorage 版暂不支持，保持编译通过) ───
+export async function bulkSaveFragments(fragments: Fragment[]) {
+  updateState((state) => {
+    const ids = new Set(fragments.map((item) => item.id))
+    return {
+      ...state,
+      fragments: [
+        ...state.fragments.filter((item) => !ids.has(item.id)),
+        ...fragments,
+      ],
+    }
+  })
+}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const db: any = null
+export async function listInsights(): Promise<Insight[]> {
+  return [...readState().insights]
+}
 
-export async function bulkSaveFragments(_fragments: unknown[]) { /* noop */ }
-export async function listInsights(): Promise<Insight[]> { return [] }
-export async function markInsightRead(_id: string) { /* noop */ }
-export async function listLinkSuggestions(_status?: string): Promise<LinkSuggestion[]> { return [] }
-export async function saveLinkSuggestion(_suggestion: LinkSuggestion) { /* noop */ }
+export async function saveInsight(insight: Insight) {
+  updateState((state) => ({
+    ...state,
+    insights: [
+      ...state.insights.filter((item) => item.id !== insight.id),
+      insight,
+    ],
+  }))
+}
+
+export async function markInsightRead(id: string) {
+  updateState((state) => ({
+    ...state,
+    insights: state.insights.map((item) =>
+      item.id === id ? { ...item, status: 'read' } : item),
+  }))
+}
+
+export async function listLinkSuggestions(status?: string): Promise<LinkSuggestion[]> {
+  const items = readState().linkSuggestions
+  return status ? items.filter((item) => item.status === status) : [...items]
+}
+
+export async function saveLinkSuggestion(suggestion: LinkSuggestion) {
+  updateState((state) => ({
+    ...state,
+    linkSuggestions: [
+      ...state.linkSuggestions.filter((item) => item.id !== suggestion.id),
+      suggestion,
+    ],
+  }))
+}

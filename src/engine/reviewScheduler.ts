@@ -1,5 +1,5 @@
 import type { KnowledgePoint } from '../types'
-import { db } from '../db/database'
+import { listKnowledgePoints } from '../db/database'
 
 /**
  * 复习调度器 — 纯规则，不调 AI
@@ -44,7 +44,7 @@ function estimateReviewCount(kp: KnowledgePoint): number {
  * 获取需要复习的知识点列表
  */
 export async function getReviewSchedule(): Promise<ReviewItem[]> {
-  const allKPs = await db.knowledgePoints.toArray()
+  const allKPs = await listKnowledgePoints()
   const now = Date.now()
   const msPerDay = 86_400_000
 

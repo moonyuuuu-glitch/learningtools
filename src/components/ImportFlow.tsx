@@ -98,7 +98,8 @@ export default function ImportFlow({
   const toggleGroup = (gi: number) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev)
-      next.has(gi) ? next.delete(gi) : next.add(gi)
+      if (next.has(gi)) next.delete(gi)
+      else next.add(gi)
       return next
     })
   }

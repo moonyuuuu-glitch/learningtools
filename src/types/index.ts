@@ -15,9 +15,11 @@ export interface KnowledgePoint {
   title: string;            // 概念短名（2~6 字）
   summary?: string;         // 一句话定义
   content: string;          // Tiptap JSON string（长笔记）
+  aliases?: string[];
   parentId?: string;        // optional manual hierarchy
   tags: string[];           // Tag.id[]
   linkedPoints: string[];   // explicit bidirectional links (KnowledgePoint.id[])
+  reviewStatus?: ReviewStatus;
   createdAt: number;
   updatedAt: number;
 }
@@ -32,8 +34,115 @@ export interface Article {
   categoryId: string;       // Category.id
   tags: string[];           // Tag.id[]
   knowledgePoints: string[]; // KnowledgePoint.id[]
+  provenanceRole?: ProvenanceRole;
+  reviewStatus?: ReviewStatus;
+  sourceHash?: string;
   readDate: string;         // "YYYY-MM-DD"
   createdAt: number;
+  updatedAt?: number;
+}
+
+export type ProvenanceRole =
+  | 'owner_input'
+  | 'external_source'
+  | 'published_product'
+  | 'unknown';
+
+export type ReviewStatus =
+  | 'candidate'
+  | 'reviewed'
+  | 'needs_review'
+  | 'archived';
+
+export type KnowledgeEntityType = 'knowledge_point' | 'framework';
+
+export type KnowledgeRelationType =
+  | 'explains'
+  | 'applies'
+  | 'prerequisite'
+  | 'contrast'
+  | 'causal'
+  | 'derived_from'
+  | 'part_of'
+  | 'related_to';
+
+export interface FrameworkCard {
+  id: string;
+  title: string;
+  problem: string;
+  steps: string[];
+  useCases: string[];
+  sourceArticleIds: string[];
+  knowledgePointIds: string[];
+  reviewStatus: ReviewStatus;
+  pinned: boolean;
+  suppressed: boolean;
+  score: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KnowledgeRelation {
+  id: string;
+  fromType: KnowledgeEntityType;
+  fromId: string;
+  toType: KnowledgeEntityType;
+  toId: string;
+  type: KnowledgeRelationType;
+  reason: string;
+  evidence: string;
+  sourceArticleIds: string[];
+  sourceHashes: Record<string, string>;
+  confidence: 'low' | 'medium' | 'high';
+  reviewStatus: ReviewStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CandidateType = 'knowledge_point' | 'framework' | 'relation';
+
+export interface ReviewCandidate {
+  id: string;
+  type: CandidateType;
+  title: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  sourceArticleIds: string[];
+  evidence: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: number;
+  resolvedAt?: number;
+}
+
+export type InteractionEventType =
+  | 'framework_view'
+  | 'source_open'
+  | 'search_open'
+  | 'graph_focus'
+  | 'relation_create'
+  | 'framework_pin'
+  | 'framework_suppress';
+
+export interface InteractionEvent {
+  id: string;
+  type: InteractionEventType;
+  entityType: KnowledgeEntityType | 'article';
+  entityId: string;
+  createdAt: number;
+}
+
+export interface GraphViewState {
+  x: number;
+  y: number;
+  zoom: number;
+  mode: 'global' | 'focus';
+  focusId?: string;
+  focusType?: KnowledgeEntityType;
+  selectedId?: string;
+  selectedType?: KnowledgeEntityType;
+  filterTags: string[];
+  showSignals: boolean;
+  positions: Record<string, { x: number; y: number }>;
 }
 
 // ─── V2 新增类型 ────────────────────────────────────
@@ -110,7 +219,7 @@ export interface Scene {
   color?: string;
 }
 
-export type ViewMode = 'graph' | 'articles' | 'calendar';
+export type ViewMode = 'home' | 'graph' | 'articles' | 'review';
 
 // ─── Agent 接入（MCP）───────────────────────────────
 
