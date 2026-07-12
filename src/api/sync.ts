@@ -6,7 +6,7 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function pushSnapshot(data: unknown): Promise<{ success: boolean; version?: number; error?: string }> {
-  const res = await fetch(`${API_BASE}/api/sync/push`, {
+  const res = await fetch(`${API_BASE}/api/sync`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ payload: data }),
@@ -15,7 +15,7 @@ export async function pushSnapshot(data: unknown): Promise<{ success: boolean; v
 }
 
 export async function pullSnapshot(): Promise<{ success: boolean; version?: number; payload?: unknown; error?: string }> {
-  const res = await fetch(`${API_BASE}/api/sync/pull`, {
+  const res = await fetch(`${API_BASE}/api/sync`, {
     headers: { ...authHeaders() },
   });
   return res.json();
