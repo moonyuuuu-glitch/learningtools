@@ -71,12 +71,12 @@ function stableLayout(
     .filter((edge) => known.has(String(edge.source)) && known.has(String(edge.target)))
     .map((edge) => ({ source: String(edge.source), target: String(edge.target) }))
   const simulation = forceSimulation(simulationNodes)
-    .force('link', forceLink(links).id((datum) => (datum as ForceNode).id).distance(130).strength(0.35))
-    .force('charge', forceManyBody().strength(-340))
-    .force('collide', forceCollide<ForceNode>((datum) => datum.radius + 12))
+    .force('link', forceLink(links).id((datum) => (datum as ForceNode).id).distance(190).strength(0.22))
+    .force('charge', forceManyBody().strength(-620))
+    .force('collide', forceCollide<ForceNode>((datum) => datum.radius + 34))
     .force('center', forceCenter(0, 0))
     .stop()
-  for (let tick = 0; tick < 240; tick += 1) simulation.tick()
+  for (let tick = 0; tick < 360; tick += 1) simulation.tick()
   return nodes.map((node, index) => ({
     ...node,
     position: {
@@ -120,15 +120,15 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
         id: relation.id,
         source: entityKey(relation.fromType, relation.fromId),
         target: entityKey(relation.toType, relation.toId),
-        type: 'smoothstep',
-        label: relation.type === 'related_to' ? undefined : relation.type,
+        type: 'simplebezier',
         style: {
-          stroke: relation.reviewStatus === 'needs_review' ? '#A89778' : '#5D715F',
-          strokeWidth: 1.8,
-          strokeDasharray: relation.reviewStatus === 'needs_review' ? '5 4' : undefined,
+          stroke: relation.reviewStatus === 'needs_review' ? '#A79677' : '#526D58',
+          strokeWidth: 2.2,
+          strokeLinecap: 'round',
+          opacity: 0.8,
+          strokeDasharray: relation.reviewStatus === 'needs_review' ? '4 8' : undefined,
         },
-        labelStyle: { fill: '#665D52', fontSize: 9, fontWeight: 600 },
-        labelBgStyle: { fill: '#F6F2E9', fillOpacity: 0.94 },
+        interactionWidth: 18,
         data: { kind: 'formal' },
       })), [store.relations])
 
@@ -136,8 +136,8 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
     if (!state.showInferred) return []
     const confidenceStyle = {
       high: { strokeWidth: 2.1, opacity: 0.78 },
-      medium: { strokeWidth: 1.5, opacity: 0.52 },
-      low: { strokeWidth: 1, opacity: 0.3 },
+      medium: { strokeWidth: 1.6, opacity: 0.46 },
+      low: { strokeWidth: 1.1, opacity: 0.24 },
     }
     return store.relations
       .filter((relation) => relation.reviewStatus === 'inferred')
@@ -145,15 +145,14 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
         id: relation.id,
         source: entityKey(relation.fromType, relation.fromId),
         target: entityKey(relation.toType, relation.toId),
-        type: 'smoothstep',
-        label: relation.type === 'related_to' ? undefined : relation.type,
+        type: 'simplebezier',
         style: {
-          stroke: '#6F83A1',
+          stroke: '#6C7FA0',
           strokeWidth: confidenceStyle[relation.confidence].strokeWidth,
           opacity: confidenceStyle[relation.confidence].opacity,
+          strokeLinecap: 'round',
         },
-        labelStyle: { fill: '#66748A', fontSize: 9, fontWeight: 600 },
-        labelBgStyle: { fill: '#F4F5F2', fillOpacity: 0.92 },
+        interactionWidth: 18,
         data: { kind: 'inferred', confidence: relation.confidence },
       }))
   }, [state.showInferred, store.relations])
@@ -166,12 +165,15 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
         id: `signal:${key}`,
         source,
         target,
+        type: 'simplebezier',
         style: {
-          stroke: '#A8B6A3',
-          strokeWidth: Math.min(0.75 + weight * 0.35, 2.2),
-          opacity: 0.28,
-          strokeDasharray: '2 7',
+          stroke: '#9EAD99',
+          strokeWidth: Math.min(0.65 + weight * 0.22, 1.5),
+          opacity: 0.18,
+          strokeLinecap: 'round',
+          strokeDasharray: '1 10',
         },
+        interactionWidth: 12,
         data: { kind: 'signal' },
       }
     })
@@ -218,6 +220,8 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
             selected: store.selectedKPId === point.id,
             articleCount: graph.nodeWeight.get(point.id) ?? 0,
             childCount: store.knowledgePoints.filter((item) => item.parentId === point.id).length,
+          relationCount: allEdges.filter((edge) =>
+            String(edge.source) === point.id || String(edge.target) === point.id).length,
           },
         }
       })
@@ -233,11 +237,14 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
           selected: store.selectedFrameworkId === framework.id,
           pinned: framework.pinned,
           sourceCount: framework.sourceArticleIds.length,
+          relationCount: allEdges.filter((edge) =>
+            String(edge.source) === `fw:${framework.id}` || String(edge.target) === `fw:${framework.id}`).length,
         },
       }))
     return [...pointNodes, ...frameworkNodes]
   }, [
     graph.nodeWeight,
+    allEdges,
     state.filterTags,
     store.frameworks,
     store.knowledgePoints,
@@ -395,10 +402,11 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
             if (edge.data?.kind !== 'formal' && edge.data?.kind !== 'inferred') return
             store.setSelectedRelationId(edge.id)
           }}
-          minZoom={0.25}
+          fitViewOptions={{ padding: 0.32 }}
+          minZoom={0.2}
           maxZoom={2.2}
         >
-          <Background variant={BackgroundVariant.Dots} gap={30} size={1} color="#BCC8B8" />
+          <Background variant={BackgroundVariant.Dots} gap={36} size={0.8} color="#CBD5C7" />
           <Controls />
           <MiniMap
             nodeColor={(node) => node.type === 'framework' ? '#B6845C' : '#718D78'}

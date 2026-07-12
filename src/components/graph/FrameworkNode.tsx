@@ -7,6 +7,7 @@ interface FrameworkNodeData {
   selected: boolean
   pinned: boolean
   sourceCount: number
+  relationCount: number
   dimmed?: boolean
 }
 
@@ -22,7 +23,7 @@ export default memo(function FrameworkNode({ data }: { data: FrameworkNodeData }
       <div>
         <div className="framework-node-label">{data.label}</div>
         <div className="framework-node-meta">
-          {data.pinned ? '置顶常看' : `${data.sourceCount} 篇来源`}
+          {data.pinned ? '置顶常看' : `${data.sourceCount} 篇来源 · ${data.relationCount} 条连接`}
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="graph-handle" />
