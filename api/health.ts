@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { callDeepSeek } from './_lib/deepseek';
 
 function hasAiConfig() {
   return Boolean(
@@ -27,23 +26,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? 'AI 已配置，尚未执行实时检测'
     : '未配置 DeepSeek API Key';
 
-  if (probe) {
-    if (!aiConfigured) {
+  if (probe && aiConfigured) {
+    try {
+      const { callDeepSeek } = await import('./_lib/deepseek.js');
+      await callDeepSeek(
+        [{ role: 'user', content: 'Reply with ok.' }],
+        { temperature: 0 },
+      );
+      aiAvailable = true;
+      aiMessage = 'AI 实时检测通过';
+    } catch (error) {
       aiAvailable = false;
-      aiMessage = '未配置 DeepSeek API Key';
-    } else {
-      try {
-        await callDeepSeek(
-          [{ role: 'user', content: 'Reply with ok.' }],
-          { temperature: 0 },
-        );
-        aiAvailable = true;
-        aiMessage = 'AI 实时检测通过';
-      } catch (error) {
-        aiAvailable = false;
-        aiMessage = error instanceof Error ? error.message : 'AI 实时检测失败';
-      }
+      aiMessage = error instanceof Error ? error.message : 'AI 实时检测失败';
     }
+  } else if (probe && !aiConfigured) {
+    aiAvailable = false;
+    aiMessage = '未配置 DeepSeek API Key';
   }
 
   const syncMessage =
