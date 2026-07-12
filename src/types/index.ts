@@ -54,6 +54,12 @@ export type ReviewStatus =
   | 'needs_review'
   | 'archived';
 
+export type RelationStatus =
+  | 'inferred'
+  | 'reviewed'
+  | 'needs_review'
+  | 'rejected';
+
 export type KnowledgeEntityType = 'knowledge_point' | 'framework';
 
 export type KnowledgeRelationType =
@@ -94,9 +100,37 @@ export interface KnowledgeRelation {
   sourceArticleIds: string[];
   sourceHashes: Record<string, string>;
   confidence: 'low' | 'medium' | 'high';
-  reviewStatus: ReviewStatus;
+  reviewStatus: RelationStatus;
+  createdBy?: 'ai' | 'user' | 'migration';
+  analysisBatchId?: string;
+  modelVersion?: string;
+  promptVersion?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface RelationAnalysisJob {
+  id: string;
+  articleId: string;
+  analysisHash: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped';
+  relationCount: number;
+  autoFormalizedCount: number;
+  retryCount: number;
+  error?: string;
+  reviewedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RelationFeedbackPattern {
+  id: string;
+  relationType: KnowledgeRelationType;
+  fromTerms: string[];
+  toTerms: string[];
+  sharedTagIds: string[];
+  weight: number;
+  createdAt: number;
 }
 
 export type CandidateType = 'knowledge_point' | 'framework' | 'relation';
@@ -142,6 +176,7 @@ export interface GraphViewState {
   selectedType?: KnowledgeEntityType;
   filterTags: string[];
   showSignals: boolean;
+  showInferred: boolean;
   positions: Record<string, { x: number; y: number }>;
 }
 

@@ -390,8 +390,47 @@ textarea:focus-visible {
   border-top: 2px solid #5d715f;
 }
 
+.legend-inferred {
+  border-top: 2px solid #6f83a1;
+  opacity: 0.65;
+}
+
 .legend-signal {
   border-top: 1px dashed #91a08d;
+}
+
+.inferred-relation-badge {
+  display: inline-flex;
+  margin-top: 0.8rem;
+  border: 1px solid #c7cfdb;
+  border-radius: 999px;
+  background: #eef1f5;
+  padding: 0.25rem 0.55rem;
+  color: #63748c;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.relation-decision-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.relation-job-status {
+  margin-top: 0.35rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #7e8a78;
+  font-size: 0.62rem;
+}
+
+.relation-job-status[data-status='failed'],
+.relation-job-status[data-status='skipped'] {
+  color: #9b6d60;
+  text-decoration: underline;
+  text-decoration-color: #d4b6ad;
 }
 
 .graph-toolbar-actions button,
@@ -787,6 +826,135 @@ textarea:focus-visible {
 .agent-approval-embedded {
   grid-column: 1 / -1;
   width: 100%;
+}
+
+.relation-batches {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.relation-batches-intro {
+  margin-bottom: 0.2rem;
+}
+
+.relation-batches-intro h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.relation-batches-intro p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.relation-batch-card {
+  border: 1px solid #d8d2c8;
+  background: #fbfaf7;
+}
+
+.relation-batch-heading {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1.2rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  border: 0;
+  background: transparent;
+  padding: 1rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.relation-batch-heading span {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.relation-batch-heading h2 {
+  margin: 0.15rem 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.relation-batch-summary {
+  display: grid;
+  justify-items: end;
+}
+
+.relation-batch-summary strong {
+  color: #657791;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.4rem;
+  font-weight: 500;
+}
+
+.relation-confidence-summary {
+  display: flex;
+  gap: 0.75rem;
+  border-top: 1px solid #e5e0d8;
+  padding: 0.55rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.relation-batch-list {
+  border-top: 1px solid #ddd7cf;
+}
+
+.relation-batch-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #e8e3dc;
+}
+
+.relation-batch-row:last-child {
+  border-bottom: 0;
+}
+
+.relation-batch-row p {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.relation-batch-row p span {
+  border-radius: 999px;
+  background: #e9edf2;
+  padding: 0.15rem 0.45rem;
+  color: #657791;
+  font-size: 0.61rem;
+}
+
+.relation-batch-row small {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.relation-batch-row blockquote {
+  margin: 0.55rem 0 0;
+  border-left: 2px solid #aeb9c7;
+  padding-left: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.relation-row-actions {
+  display: flex;
+  align-items: start;
+  gap: 0.4rem;
 }
 
 .agent-approval-embedded {

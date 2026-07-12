@@ -9,6 +9,8 @@ import type {
   InteractionEvent,
   KnowledgePoint,
   KnowledgeRelation,
+  RelationAnalysisJob,
+  RelationFeedbackPattern,
   LinkSuggestion,
   Message,
   ReviewCandidate,
@@ -20,7 +22,7 @@ const STORAGE_KEY = 'learningtools.storage.v2'
 const STORAGE_KEY_V3 = 'learningtools.storage.v3'
 
 export type PersistedState = {
-  schemaVersion: 3
+  schemaVersion: 4
   knowledgePoints: KnowledgePoint[]
   articles: Article[]
   tags: Tag[]
@@ -28,6 +30,8 @@ export type PersistedState = {
   scenes: Scene[]
   frameworks: FrameworkCard[]
   relations: KnowledgeRelation[]
+  relationAnalysisJobs: RelationAnalysisJob[]
+  relationFeedbackPatterns: RelationFeedbackPattern[]
   candidates: ReviewCandidate[]
   interactionEvents: InteractionEvent[]
   fragments: Fragment[]
@@ -39,7 +43,7 @@ export type PersistedState = {
 }
 
 const DEFAULT_STATE: PersistedState = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   knowledgePoints: [],
   articles: [],
   tags: [],
@@ -47,6 +51,8 @@ const DEFAULT_STATE: PersistedState = {
   scenes: [],
   frameworks: [],
   relations: [],
+  relationAnalysisJobs: [],
+  relationFeedbackPatterns: [],
   candidates: [],
   interactionEvents: [],
   fragments: [],
@@ -70,7 +76,7 @@ function readState(): PersistedState {
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedState>
     const migrated: PersistedState = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       knowledgePoints: parsed.knowledgePoints ?? [],
       articles: (parsed.articles ?? []).map((article) => ({
         ...article,
@@ -83,6 +89,8 @@ function readState(): PersistedState {
       scenes: parsed.scenes ?? [],
       frameworks: parsed.frameworks ?? [],
       relations: parsed.relations ?? migrateLinkedRelations(parsed.knowledgePoints ?? []),
+      relationAnalysisJobs: parsed.relationAnalysisJobs ?? [],
+      relationFeedbackPatterns: parsed.relationFeedbackPatterns ?? [],
       candidates: parsed.candidates ?? [],
       interactionEvents: parsed.interactionEvents ?? [],
       fragments: parsed.fragments ?? [],
@@ -129,6 +137,7 @@ function migrateLinkedRelations(points: KnowledgePoint[]): KnowledgeRelation[] {
         sourceHashes: {},
         confidence: 'low',
         reviewStatus: 'needs_review',
+        createdBy: 'migration',
         createdAt: now,
         updatedAt: now,
       })
@@ -218,6 +227,14 @@ export async function listFrameworks() {
 
 export async function listRelations() {
   return [...readState().relations]
+}
+
+export async function listRelationAnalysisJobs() {
+  return [...readState().relationAnalysisJobs]
+}
+
+export async function listRelationFeedbackPatterns() {
+  return [...readState().relationFeedbackPatterns]
 }
 
 export async function listCandidates(status?: ReviewCandidate['status']) {
@@ -368,6 +385,39 @@ export async function saveRelation(relation: KnowledgeRelation) {
   }))
 }
 
+export async function saveRelations(relations: KnowledgeRelation[]) {
+  updateState((state) => {
+    const ids = new Set(relations.map((item) => item.id))
+    return {
+      ...state,
+      relations: [
+        ...state.relations.filter((item) => !ids.has(item.id)),
+        ...relations.map((item) => ({ ...item, updatedAt: Date.now() })),
+      ],
+    }
+  })
+}
+
+export async function saveRelationAnalysisJob(job: RelationAnalysisJob) {
+  updateState((state) => ({
+    ...state,
+    relationAnalysisJobs: [
+      ...state.relationAnalysisJobs.filter((item) => item.id !== job.id),
+      job,
+    ],
+  }))
+}
+
+export async function saveRelationFeedbackPattern(pattern: RelationFeedbackPattern) {
+  updateState((state) => ({
+    ...state,
+    relationFeedbackPatterns: [
+      ...state.relationFeedbackPatterns.filter((item) => item.id !== pattern.id),
+      pattern,
+    ],
+  }))
+}
+
 export async function deleteRelation(id: string) {
   updateState((state) => ({
     ...state,
@@ -490,7 +540,7 @@ export async function importAll(
 ) {
   const incoming = data as Partial<PersistedState>
   writeState({
-    schemaVersion: 3,
+    schemaVersion: 4,
     knowledgePoints: data.knowledgePoints ?? [],
     articles: (data.articles ?? []).map((article) => ({
       ...article,
@@ -503,6 +553,8 @@ export async function importAll(
     scenes: (data as Record<string, unknown>).scenes as PersistedState['scenes'] ?? [],
     frameworks: incoming.frameworks ?? [],
     relations: incoming.relations ?? migrateLinkedRelations(data.knowledgePoints ?? []),
+    relationAnalysisJobs: incoming.relationAnalysisJobs ?? [],
+    relationFeedbackPatterns: incoming.relationFeedbackPatterns ?? [],
     candidates: incoming.candidates ?? [],
     interactionEvents: incoming.interactionEvents ?? [],
     fragments: incoming.fragments ?? [],
@@ -676,7 +728,7 @@ export async function seedDemo() {
   ]
 
   writeState({
-    schemaVersion: 3,
+    schemaVersion: 4,
     knowledgePoints,
     articles,
     tags,
@@ -684,6 +736,8 @@ export async function seedDemo() {
     scenes: [],
     frameworks: [],
     relations: migrateLinkedRelations(knowledgePoints),
+    relationAnalysisJobs: [],
+    relationFeedbackPatterns: [],
     candidates: [],
     interactionEvents: [],
     fragments: [],

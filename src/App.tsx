@@ -14,6 +14,7 @@ import { useAgentBridge } from './hooks/useAgentBridge';
 import { startBackgroundLoop, stopBackgroundLoop } from './engine/backgroundLoop';
 import { exportAll, importAll } from './db/database';
 import { pushSnapshot, pullSnapshot } from './api/sync';
+import { startRelationJobLoop } from './engine/relationJobs';
 
 export default function App() {
   const store = useStore();
@@ -24,7 +25,11 @@ export default function App() {
   // 启动后台认知循环
   useEffect(() => {
     startBackgroundLoop();
-    return () => stopBackgroundLoop();
+    const stopRelationJobs = startRelationJobLoop();
+    return () => {
+      stopBackgroundLoop();
+      stopRelationJobs();
+    };
   }, []);
 
   const selectedKP = store.knowledgePoints.find(

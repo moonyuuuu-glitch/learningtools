@@ -105,15 +105,36 @@ export async function chatWithContext(input: ChatInput) {
 // ─── V2: Suggest Links ───────────────────────────
 
 export type SuggestLinksInput = {
-  source: { title: string; content: string; tags: string[] }
-  candidates: { id: string; title: string; content: string; tags: string[] }[]
+  article: { id: string; title: string; content: string }
+  currentNodes: {
+    id: string
+    type: 'knowledge_point' | 'framework'
+    title: string
+    summary?: string
+  }[]
+  candidates: {
+    id: string
+    type: 'knowledge_point' | 'framework'
+    title: string
+    summary?: string
+  }[]
+  feedbackPatterns?: {
+    relationType: string
+    fromTerms: string[]
+    toTerms: string[]
+    sharedTagIds: string[]
+    weight: number
+  }[]
 }
 
 export type SuggestLinksResponse = {
-  suggestions: {
-    candidateId: string
+  relations: {
+    fromId: string
+    toId: string
     relationType: string
     reason: string
+    evidence: string
+    confidence: 'low' | 'medium' | 'high'
   }[]
 }
 

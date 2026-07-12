@@ -93,6 +93,7 @@ const DEFAULT_STATE: GraphViewState = {
   mode: 'global',
   filterTags: [],
   showSignals: true,
+  showInferred: true,
   positions: {},
 }
 
@@ -131,6 +132,32 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
         data: { kind: 'formal' },
       })), [store.relations])
 
+  const inferredEdges = useMemo<Edge[]>(() => {
+    if (!state.showInferred) return []
+    const confidenceStyle = {
+      high: { strokeWidth: 2.1, opacity: 0.78 },
+      medium: { strokeWidth: 1.5, opacity: 0.52 },
+      low: { strokeWidth: 1, opacity: 0.3 },
+    }
+    return store.relations
+      .filter((relation) => relation.reviewStatus === 'inferred')
+      .map((relation) => ({
+        id: relation.id,
+        source: entityKey(relation.fromType, relation.fromId),
+        target: entityKey(relation.toType, relation.toId),
+        type: 'smoothstep',
+        label: relation.type === 'related_to' ? undefined : relation.type,
+        style: {
+          stroke: '#6F83A1',
+          strokeWidth: confidenceStyle[relation.confidence].strokeWidth,
+          opacity: confidenceStyle[relation.confidence].opacity,
+        },
+        labelStyle: { fill: '#66748A', fontSize: 9, fontWeight: 600 },
+        labelBgStyle: { fill: '#F4F5F2', fillOpacity: 0.92 },
+        data: { kind: 'inferred', confidence: relation.confidence },
+      }))
+  }, [state.showInferred, store.relations])
+
   const signalEdges = useMemo<Edge[]>(() => {
     if (!state.showSignals) return []
     return [...graph.edges.entries()].map(([key, weight]) => {
@@ -151,8 +178,8 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
   }, [graph, state.showSignals])
 
   const allEdges = useMemo(
-    () => [...signalEdges, ...formalEdges],
-    [signalEdges, formalEdges],
+    () => [...signalEdges, ...inferredEdges, ...formalEdges],
+    [signalEdges, inferredEdges, formalEdges],
   )
 
   const visibleIds = useMemo(() => {
@@ -284,6 +311,7 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
         </div>
         <div className="graph-legend">
           <span><i className="legend-formal" />正式关系</span>
+          <span><i className="legend-inferred" />AI 推断</span>
           <span><i className="legend-signal" />弱关联信号</span>
         </div>
         <div className="graph-toolbar-actions">
@@ -304,6 +332,12 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
             }}
           >
             <Focus size={14} /> 聚焦
+          </button>
+          <button
+            data-active={state.showInferred}
+            onClick={() => persistState({ showInferred: !state.showInferred })}
+          >
+            <ScanSearch size={14} /> AI 推断
           </button>
           <button
             data-active={state.showSignals}
@@ -358,7 +392,7 @@ export default function KnowledgeGraph({ store }: { store: Store }) {
             }
           }}
           onEdgeClick={(_, edge) => {
-            if (edge.data?.kind !== 'formal') return
+            if (edge.data?.kind !== 'formal' && edge.data?.kind !== 'inferred') return
             store.setSelectedRelationId(edge.id)
           }}
           minZoom={0.25}

@@ -5,6 +5,7 @@ import type { Store } from '../hooks/useStore'
 import { nanoid } from '../utils'
 import AgentApprovalPanel from './AgentApprovalPanel'
 import { auditKnowledgeBase } from '../engine/governance'
+import RelationBatchCard from './review/RelationBatchCard'
 
 function candidateIcon(type: ReviewCandidate['type']) {
   if (type === 'framework') return Layers3
@@ -25,6 +26,10 @@ export default function ReviewInbox({
 }) {
   const [tab, setTab] = useState<'pending' | 'governance' | 'agent'>('pending')
   const pending = store.candidates.filter((candidate) => candidate.status === 'pending')
+  const inferredRelations = store.relations.filter((relation) => relation.reviewStatus === 'inferred')
+  const relationBatches = store.relationAnalysisJobs
+    .filter((job) => inferredRelations.some((relation) => relation.analysisBatchId === job.id))
+    .sort((left, right) => right.updatedAt - left.updatedAt)
   const governanceIssues = auditKnowledgeBase({
     articles: store.articles,
     knowledgePoints: store.knowledgePoints,
@@ -106,17 +111,17 @@ export default function ReviewInbox({
         <div>
           <p className="eyebrow">Review first</p>
           <h1>审核箱</h1>
-          <p>AI 只提出候选。你确认后，它们才进入正式知识库。</p>
+          <p>AI 会先把推断关系画进图谱；你只需纠正错误，或把重要关系升为正式。</p>
         </div>
         <div className="review-count">
-          <strong>{pending.length + governanceIssues.length + agentProposals.length}</strong>
+          <strong>{pending.length + inferredRelations.length + governanceIssues.length + agentProposals.length}</strong>
           <span>项需要判断</span>
         </div>
       </header>
 
       <nav className="review-tabs">
         <button data-active={tab === 'pending'} onClick={() => setTab('pending')}>
-          <Inbox size={14} /> 知识候选 <span>{pending.length}</span>
+          <Inbox size={14} /> AI 建议 <span>{pending.length + inferredRelations.length}</span>
         </button>
         <button data-active={tab === 'governance'} onClick={() => setTab('governance')}>
           <ShieldCheck size={14} /> 需复核 <span>{governanceIssues.length}</span>
@@ -127,11 +132,27 @@ export default function ReviewInbox({
       </nav>
 
       <section className="review-list">
-        {tab === 'pending' && pending.length === 0 && (
+        {tab === 'pending' && relationBatches.length > 0 && (
+          <div className="relation-batches">
+            <div className="relation-batches-intro">
+              <h2>按资料形成的 AI 关系</h2>
+              <p>这些关系已显示在图谱中。你只需纠正错误，或把重要关系升为正式。</p>
+            </div>
+            {relationBatches.map((job) => (
+              <RelationBatchCard
+                key={job.id}
+                job={job}
+                relations={inferredRelations.filter((relation) => relation.analysisBatchId === job.id)}
+                store={store}
+              />
+            ))}
+          </div>
+        )}
+        {tab === 'pending' && pending.length === 0 && relationBatches.length === 0 && (
           <div className="review-empty">
             <FileCheck2 size={22} />
             <h2>没有等待确认的知识候选</h2>
-            <p>从资料中识别出的知识点、框架和正式关系会在这里出现。</p>
+            <p>从资料中识别出的知识点、框架和 AI 推断关系会在这里出现。</p>
           </div>
         )}
         {tab === 'pending' && pending.map((candidate) => {

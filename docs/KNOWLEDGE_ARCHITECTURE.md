@@ -20,7 +20,15 @@ AI output never becomes reviewed knowledge automatically. AI may create candidat
 
 ## Relationship rule
 
-Formal relations carry a type, reason, evidence, confidence, source references, and source hashes. Weak signals remain visually subordinate and can be hidden. If a source changes, dependent relations move to `needs_review`.
+The graph has three relationship layers:
+
+- Weak signals are derived locally from co-occurrence and remain visually subordinate.
+- AI inferred relations are generated after a source is created or updated. They appear immediately with confidence styling and can be promoted or rejected.
+- Formal relations carry a type, reason, evidence, confidence, source references, and source hashes.
+
+Only a high-confidence `derived_from` inference may become formal automatically. Other inferred relations remain editable suggestions. Rejected suggestions create feedback patterns that reduce similar future recommendations. If a source changes, dependent formal relations move to `needs_review`.
+
+To protect the hosted free tier, background relation analysis is serialized and capped at eight AI analysis requests per browser per day. Pending historical documents remain queued for a later day instead of creating a burst of serverless requests.
 
 ## Retrieval rule
 

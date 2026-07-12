@@ -1,5 +1,6 @@
-import { ArrowUpRight, BookOpen, Link2, Network, X } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Check, Link2, Network, ThumbsDown, X } from 'lucide-react'
 import type { Store } from '../hooks/useStore'
+import { feedbackPatternForRelation } from '../engine/relationInference'
 
 const RELATION_LABELS: Record<string, string> = {
   explains: '解释',
@@ -43,6 +44,11 @@ export default function GraphDetailPanel({ store }: { store: Store }) {
         <div className="graph-detail-body">
           <p className="eyebrow">{RELATION_LABELS[relation.type] ?? relation.type}</p>
           <h2>{from?.title ?? '未知节点'} → {to?.title ?? '未知节点'}</h2>
+          {relation.reviewStatus === 'inferred' && (
+            <div className="inferred-relation-badge">
+              AI 推断 · {relation.confidence === 'high' ? '高' : relation.confidence === 'medium' ? '中' : '低'}置信度
+            </div>
+          )}
           <section>
             <h3>为什么有关联</h3>
             <p>{relation.reason || '尚未补充关系说明。'}</p>
@@ -73,6 +79,38 @@ export default function GraphDetailPanel({ store }: { store: Store }) {
             <button className="primary-action" onClick={() => store.setViewMode('review')}>
               去审核这条关系
             </button>
+          )}
+          {relation.reviewStatus === 'inferred' && (
+            <div className="relation-decision-actions">
+              <button
+                className="primary-action"
+                onClick={() => void store.upsertRelation({
+                  ...relation,
+                  reviewStatus: 'reviewed',
+                  updatedAt: Date.now(),
+                })}
+              >
+                <Check size={13} /> 升为正式
+              </button>
+              <button
+                className="quiet-action"
+                onClick={() => {
+                  const pattern = feedbackPatternForRelation(
+                    relation,
+                    store.knowledgePoints,
+                    store.frameworks,
+                  )
+                  void store.upsertRelationFeedbackPattern(pattern)
+                  void store.upsertRelation({
+                    ...relation,
+                    reviewStatus: 'rejected',
+                    updatedAt: Date.now(),
+                  }).then(() => store.setSelectedRelationId(null))
+                }}
+              >
+                <ThumbsDown size={13} /> 不对
+              </button>
+            </div>
           )}
         </div>
       </aside>
@@ -124,9 +162,12 @@ export default function GraphDetailPanel({ store }: { store: Store }) {
   if (point) {
     const sources = store.articles.filter((article) =>
       article.knowledgePoints.includes(point.id))
-    const formalRelations = store.relations.filter((item) =>
-      (item.fromType === 'knowledge_point' && item.fromId === point.id)
-      || (item.toType === 'knowledge_point' && item.toId === point.id))
+    const visibleRelations = store.relations.filter((item) =>
+      item.reviewStatus !== 'rejected'
+      && (
+        (item.fromType === 'knowledge_point' && item.fromId === point.id)
+        || (item.toType === 'knowledge_point' && item.toId === point.id)
+      ))
     return (
       <aside className="graph-detail-panel">
         <header>
@@ -138,15 +179,18 @@ export default function GraphDetailPanel({ store }: { store: Store }) {
           <h2>{point.title}</h2>
           <p className="graph-detail-lead">{point.summary || '尚未添加一句话定义。'}</p>
           <section>
-            <h3><Link2 size={12} /> 正式关系</h3>
-            {formalRelations.length === 0 && <p className="muted-copy">还没有已确认的语义关系</p>}
-            {formalRelations.map((item) => (
+            <h3><Link2 size={12} /> 知识关系</h3>
+            {visibleRelations.length === 0 && <p className="muted-copy">还没有已发现的语义关系</p>}
+            {visibleRelations.map((item) => (
               <button
                 className="relation-row"
                 key={item.id}
                 onClick={() => store.setSelectedRelationId(item.id)}
               >
-                <span>{RELATION_LABELS[item.type] ?? item.type}</span>
+                <span>
+                  {item.reviewStatus === 'inferred' && 'AI · '}
+                  {RELATION_LABELS[item.type] ?? item.type}
+                </span>
                 <small>{item.reason || '查看证据'}</small>
               </button>
             ))}

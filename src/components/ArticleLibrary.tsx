@@ -8,6 +8,7 @@ import { matchConcept } from '../lib/concepts';
 import { useBeforeUnloadWarning } from '../hooks/useBeforeUnloadWarning';
 import CalendarBoard from './CalendarBoard';
 import { generateFrameworkCandidates } from '../engine/candidatePipeline';
+import { retryRelationAnalysis } from '../engine/relationJobs';
 
 interface Props { store: Store; }
 
@@ -135,7 +136,7 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
     if (!hasInput || isSaving) return;
     setIsSaving(true);
     try {
-      await store.upsertArticle({
+      const savedArticle: Article = {
         id: articleId,
         title: trimmedTitle || '未命名文章',
         url: url.trim() || undefined,
@@ -149,7 +150,8 @@ function ArticleForm({ article, store, onClose }: { article: Partial<Article>; s
         reviewStatus: article.reviewStatus ?? 'reviewed',
         readDate,
         createdAt,
-      });
+      };
+      await store.upsertArticle(savedArticle);
       setDirty(false);
       if (closeAfterSave) onClose();
     } finally {
@@ -628,6 +630,11 @@ export default function ArticleLibrary({ store }: Props) {
             </thead>
             <tbody>
           {filtered.map((a) => (
+                (() => {
+                  const relationJob = store.relationAnalysisJobs
+                    .filter((job) => job.articleId === a.id)
+                    .sort((left, right) => right.updatedAt - left.updatedAt)[0];
+                  return (
                 <tr key={a.id} className="group cursor-pointer" style={{ borderBottom: '1px solid var(--border-light)' }}
                   onClick={() => store.setSelectedArticleId(a.id)}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
@@ -638,6 +645,24 @@ export default function ArticleLibrary({ store }: Props) {
                       {a.url && <a href={a.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink size={10} style={{ color: 'var(--text-muted)' }} /></a>}
                     </div>
                     {a.summary && <div className="truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{a.summary}</div>}
+                    {relationJob && (
+                      <button
+                        className="relation-job-status"
+                        data-status={relationJob.status}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (relationJob.status === 'failed' || relationJob.status === 'skipped') {
+                            void retryRelationAnalysis(a.id).then(store.refresh);
+                          }
+                        }}
+                      >
+                        {relationJob.status === 'queued' && 'AI 关系等待分析'}
+                        {relationJob.status === 'running' && 'AI 正在编织关系…'}
+                        {relationJob.status === 'completed' && `AI 已形成 ${relationJob.relationCount} 条关系`}
+                        {relationJob.status === 'failed' && '分析失败 · 点击重试'}
+                        {relationJob.status === 'skipped' && `${relationJob.error || '暂不分析'} · 点击重试`}
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="provenance-badge">
@@ -678,6 +703,8 @@ export default function ArticleLibrary({ store }: Props) {
                     </div>
                   </td>
                 </tr>
+                  );
+                })()
               ))}
               {filtered.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-16 text-sm" style={{ color: 'var(--text-muted)' }}>暂无资料，点击“添加资料”开始记录</td></tr>

@@ -100,7 +100,11 @@ function runRead(store: Store, req: AgentRequest): { ok: boolean; data?: unknown
         ok: true,
         data: {
           nodes,
-          formalRelations: store.relations,
+          formalRelations: store.relations.filter((relation) =>
+            relation.reviewStatus === 'reviewed'
+            || relation.reviewStatus === 'needs_review'),
+          inferredRelations: store.relations.filter((relation) =>
+            relation.reviewStatus === 'inferred'),
           weakSignals,
         },
       };

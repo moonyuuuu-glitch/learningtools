@@ -19,12 +19,16 @@ import {
   listScenes,
   listFrameworks,
   listRelations,
+  listRelationAnalysisJobs,
+  listRelationFeedbackPatterns,
   listCandidates,
   listInteractionEvents,
   getGraphViewState,
   saveFramework,
   deleteFramework,
   saveRelation,
+  saveRelationAnalysisJob,
+  saveRelationFeedbackPattern,
   deleteRelation,
   saveCandidate,
   recordInteraction,
@@ -33,6 +37,7 @@ import {
   deleteScene as dbDeleteScene,
 } from '../db/database';
 import { checkApiHealth } from '../api/ai';
+import { createRelationAnalysisJob } from '../engine/relationInference';
 import type {
   KnowledgePoint,
   Article,
@@ -40,6 +45,8 @@ import type {
   GraphViewState,
   InteractionEvent,
   KnowledgeRelation,
+  RelationAnalysisJob,
+  RelationFeedbackPattern,
   ReviewCandidate,
   Tag,
   Category,
@@ -53,6 +60,8 @@ export function useStore() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [frameworks, setFrameworks] = useState<FrameworkCard[]>([]);
   const [relations, setRelations] = useState<KnowledgeRelation[]>([]);
+  const [relationAnalysisJobs, setRelationAnalysisJobs] = useState<RelationAnalysisJob[]>([]);
+  const [relationFeedbackPatterns, setRelationFeedbackPatterns] = useState<RelationFeedbackPattern[]>([]);
   const [candidates, setCandidates] = useState<ReviewCandidate[]>([]);
   const [interactionEvents, setInteractionEvents] = useState<InteractionEvent[]>([]);
   const [graphViewState, setGraphViewState] = useState<GraphViewState | undefined>();
@@ -72,7 +81,7 @@ export function useStore() {
   const [apiMessage, setApiMessage] = useState('');
 
   const refresh = useCallback(async () => {
-    const [kps, arts, tgs, cats, scs, frs, rels, cands, events, savedGraphState] = await Promise.all([
+    const [kps, arts, tgs, cats, scs, frs, rels, jobs, feedback, cands, events, savedGraphState] = await Promise.all([
       listKnowledgePoints(),
       listArticles(),
       listTags(),
@@ -80,6 +89,8 @@ export function useStore() {
       listScenes(),
       listFrameworks(),
       listRelations(),
+      listRelationAnalysisJobs(),
+      listRelationFeedbackPatterns(),
       listCandidates(),
       listInteractionEvents(),
       getGraphViewState(),
@@ -93,6 +104,8 @@ export function useStore() {
     setScenes(scs);
     setFrameworks(frs);
     setRelations(rels);
+    setRelationAnalysisJobs(jobs);
+    setRelationFeedbackPatterns(feedback);
     setCandidates(cands);
     setInteractionEvents(events);
     setGraphViewState(savedGraphState);
@@ -161,6 +174,7 @@ export function useStore() {
   // Article CRUD
   const upsertArticle = useCallback(async (art: Article) => {
     await saveArticle(art);
+    await createRelationAnalysisJob(art);
     await refresh();
   }, [refresh]);
 
@@ -192,6 +206,16 @@ export function useStore() {
 
   const upsertCandidate = useCallback(async (candidate: ReviewCandidate) => {
     await saveCandidate(candidate);
+    await refresh();
+  }, [refresh]);
+
+  const upsertRelationAnalysisJob = useCallback(async (job: RelationAnalysisJob) => {
+    await saveRelationAnalysisJob(job);
+    await refresh();
+  }, [refresh]);
+
+  const upsertRelationFeedbackPattern = useCallback(async (pattern: RelationFeedbackPattern) => {
+    await saveRelationFeedbackPattern(pattern);
     await refresh();
   }, [refresh]);
 
@@ -248,7 +272,8 @@ export function useStore() {
 
   return {
     viewMode, setViewMode,
-    knowledgePoints, articles, setArticles, frameworks, relations, candidates, interactionEvents,
+    knowledgePoints, articles, setArticles, frameworks, relations,
+    relationAnalysisJobs, relationFeedbackPatterns, candidates, interactionEvents,
     graphViewState, updateGraphViewState,
     tags, categories, tagMap, categoryMap,
     scenes, activeSceneId, activateScene, upsertScene, removeScene,
@@ -262,7 +287,7 @@ export function useStore() {
     upsertArticle, removeArticle,
     upsertFramework, removeFramework,
     upsertRelation, removeRelation,
-    upsertCandidate, addInteraction,
+    upsertCandidate, upsertRelationAnalysisJob, upsertRelationFeedbackPattern, addInteraction,
     upsertTag, removeTag,
     upsertCategory, removeCategory,
     handleExport, handleImport,
