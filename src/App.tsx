@@ -56,16 +56,34 @@ export default function App() {
           onOpenAgent={() => setShowAgent(true)}
           agentPending={bridge.pendingCount}
           onSyncPush={async () => {
+            if (store.syncStatus !== 'ready') {
+              alert(`云同步不可用：${store.syncMessage || '当前环境未配置云同步'}`);
+              return;
+            }
+            const hasLocalContent =
+              store.articles.length > 0
+              || store.knowledgePoints.length > 0
+              || store.frameworks.length > 0
+              || store.relations.length > 0
+              || store.candidates.length > 0;
+            if (!hasLocalContent) {
+              alert('当前浏览器还没有可上传的本地知识。先导入资料，或从云端恢复自己的快照。');
+              return;
+            }
             try {
               const data = await exportAll();
               const r = await pushSnapshot(data);
-              alert(r.success ? `同步成功 v${r.version}` : `同步失败: ${r.error}`);
+              alert(r.success ? `已上传当前浏览器的本地快照 v${r.version}` : `同步失败: ${r.error}`);
             } catch (e: unknown) {
               alert(`同步失败: ${e instanceof Error ? e.message : e}`);
             }
           }}
           onSyncPull={async () => {
-            if (!confirm('这会覆盖本地所有数据，确定从飞书恢复？')) return;
+            if (store.syncStatus !== 'ready') {
+              alert(`云同步不可用：${store.syncMessage || '当前环境未配置云同步'}`);
+              return;
+            }
+            if (!confirm('这会用云端快照覆盖当前浏览器里的本地数据，确定继续吗？')) return;
             try {
               const r = await pullSnapshot();
               if (r.success && r.payload) {

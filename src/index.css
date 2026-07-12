@@ -325,6 +325,92 @@ textarea:focus-visible {
   line-height: 1.75;
 }
 
+.empty-home-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.4rem 0 1.1rem;
+}
+
+.empty-home-status-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid #d9d0c2;
+  background: rgba(254, 253, 248, 0.82);
+  padding: 0.95rem;
+}
+
+.empty-home-status-card strong {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.empty-home-status-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+  line-height: 1.65;
+}
+
+.empty-home-status-label {
+  color: #8b7965;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.empty-home-inline-action {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #79634f;
+  font-size: 0.72rem;
+  text-decoration: underline;
+  text-decoration-color: #cbbdac;
+}
+
+.empty-home-path {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.empty-home-path > div {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.empty-home-path span {
+  display: inline-grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #f4f0e8;
+  color: #8b6b3f;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.empty-home-path p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .empty-home-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .knowledge-explorer {
   position: relative;
   width: 100%;

@@ -77,8 +77,10 @@ export function useStore() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [apiStatus, setApiStatus] = useState<'idle' | 'checking' | 'ready' | 'error'>('idle');
+  const [apiStatus, setApiStatus] = useState<'idle' | 'checking' | 'configured' | 'ready' | 'error'>('idle');
   const [apiMessage, setApiMessage] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'ready' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
 
   const refresh = useCallback(async () => {
     const [kps, arts, tgs, cats, scs, frs, rels, jobs, feedback, cands, events, savedGraphState] = await Promise.all([
@@ -117,22 +119,45 @@ export function useStore() {
     refresh();
   }, [refresh]);
 
-  const verifyApi = useCallback(async () => {
+  const applyHealthStatus = useCallback((health: Awaited<ReturnType<typeof checkApiHealth>>) => {
+    const ai = health.capabilities.ai;
+    if (!ai.configured) {
+      setApiStatus('error');
+      setApiMessage(ai.message);
+    } else if (ai.available) {
+      setApiStatus(ai.checkedLive ? 'ready' : 'configured');
+      setApiMessage(ai.message);
+    } else {
+      setApiStatus('error');
+      setApiMessage(ai.message);
+    }
+
+    const sync = health.capabilities.sync;
+    setSyncStatus(sync.available ? 'ready' : 'error');
+    setSyncMessage(sync.message);
+  }, []);
+
+  const refreshHealth = useCallback(async (probe = false) => {
     setApiStatus('checking');
     setApiMessage('');
     try {
-      const health = await checkApiHealth();
-      setApiStatus(health.ok ? 'ready' : 'error');
-      setApiMessage(health.ok ? 'AI API 已连接' : 'AI API 状态异常');
+      const health = await checkApiHealth(probe);
+      applyHealthStatus(health);
     } catch (error) {
       setApiStatus('error');
-      setApiMessage(error instanceof Error ? error.message : 'AI API 连接失败');
+      setApiMessage(error instanceof Error ? error.message : 'AI 状态检测失败');
+      setSyncStatus('error');
+      setSyncMessage('云同步状态检测失败');
     }
-  }, []);
+  }, [applyHealthStatus]);
+
+  const verifyApi = useCallback(async () => {
+    await refreshHealth(true);
+  }, [refreshHealth]);
 
   useEffect(() => {
-    verifyApi();
-  }, [verifyApi]);
+    void refreshHealth(false);
+  }, [refreshHealth]);
 
   // Scene actions
   const activateScene = useCallback((id: string | null) => {
@@ -292,6 +317,7 @@ export function useStore() {
     upsertCategory, removeCategory,
     handleExport, handleImport,
     apiStatus, apiMessage, verifyApi,
+    syncStatus, syncMessage,
     refresh,
   };
 }

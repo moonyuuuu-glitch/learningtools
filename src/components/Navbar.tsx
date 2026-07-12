@@ -17,6 +17,8 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
     apiStatus,
     apiMessage,
     verifyApi,
+    syncStatus,
+    syncMessage,
   } = store;
   const [showTagMgr, setShowTagMgr] = useState(false);
   const [showCatMgr, setShowCatMgr] = useState(false);
@@ -28,6 +30,8 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
     { id: 'articles', label: '资料库', icon: Library },
     { id: 'review', label: '审核箱', icon: Inbox },
   ] as const;
+
+  const syncReady = syncStatus === 'ready';
 
   return (
     <>
@@ -80,24 +84,30 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
         <div className="flex-1" />
 
         <button
-          onClick={verifyApi}
+          onClick={() => void verifyApi()}
           className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
           style={{
             color:
               apiStatus === 'ready'
                 ? '#2f855a'
+                : apiStatus === 'configured'
+                  ? '#8b6b3f'
                 : apiStatus === 'error'
                   ? 'var(--accent)'
                   : 'var(--text-secondary)',
             background:
               apiStatus === 'ready'
                 ? 'rgba(47,133,90,0.10)'
+                : apiStatus === 'configured'
+                  ? 'rgba(139,107,63,0.10)'
                 : apiStatus === 'error'
                   ? 'var(--accent-light)'
                   : 'var(--bg-surface)',
             borderColor:
               apiStatus === 'ready'
                 ? 'rgba(47,133,90,0.25)'
+                : apiStatus === 'configured'
+                  ? 'rgba(139,107,63,0.22)'
                 : 'var(--border-light)',
           }}
           title={apiMessage || '检测 AI API 状态'}
@@ -105,11 +115,25 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
           {apiStatus === 'checking'
             ? 'AI 检测中'
             : apiStatus === 'ready'
-              ? 'AI 已连接'
+              ? 'AI 可用'
+              : apiStatus === 'configured'
+                ? 'AI 已配置'
               : apiStatus === 'error'
-                ? 'AI 未连接'
+                ? 'AI 不可用'
                 : '检测 AI'}
         </button>
+
+        <div
+          className="text-[11px] px-2.5 py-1 rounded-full border"
+          style={{
+            color: syncReady ? '#2f855a' : 'var(--text-secondary)',
+            background: syncReady ? 'rgba(47,133,90,0.10)' : 'var(--bg-surface)',
+            borderColor: syncReady ? 'rgba(47,133,90,0.25)' : 'var(--border-light)',
+          }}
+          title={syncMessage || '检测云同步状态'}
+        >
+          {syncReady ? '云同步可用' : '云同步未配置'}
+        </div>
 
         {/* V2: Import + Insights */}
         <button onClick={onOpenImport} className="nav-tool-btn" title="导入文档">
@@ -137,10 +161,22 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
         <button onClick={() => setShowCatMgr(true)} className="nav-tool-btn" title="分类管理">
           <Plus size={15} style={{ color: 'var(--text-secondary)' }} />
         </button>
-        <button onClick={onSyncPush} className="nav-tool-btn" title="同步到飞书">
+        <button
+          onClick={onSyncPush}
+          className="nav-tool-btn"
+          title={syncReady ? '把当前浏览器数据上传到云端' : (syncMessage || '云同步未配置')}
+          disabled={!syncReady}
+          style={{ opacity: syncReady ? 1 : 0.45 }}
+        >
           <span style={{ fontSize: 14 }}>☁️</span>
         </button>
-        <button onClick={onSyncPull} className="nav-tool-btn" title="从飞书恢复">
+        <button
+          onClick={onSyncPull}
+          className="nav-tool-btn"
+          title={syncReady ? '从云端恢复到当前浏览器' : (syncMessage || '云同步未配置')}
+          disabled={!syncReady}
+          style={{ opacity: syncReady ? 1 : 0.45 }}
+        >
           <span style={{ fontSize: 14 }}>⬇️</span>
         </button>
         <button onClick={handleExport} className="nav-tool-btn" title="导出备份">

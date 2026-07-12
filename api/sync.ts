@@ -7,11 +7,10 @@ function unauthorized(res: VercelResponse) {
 }
 
 function missingConfig(res: VercelResponse) {
-  return res.status(500).json({ success: false, error: 'Supabase not configured' })
+  return res.status(503).json({ success: false, error: 'Cloud sync not configured' })
 }
 
 function authFailed(req: VercelRequest) {
-  if (!SYNC_SECRET) return false
   return req.headers['x-sync-secret'] !== SYNC_SECRET
 }
 
@@ -92,8 +91,8 @@ async function handlePull(res: VercelResponse) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SYNC_SECRET) return missingConfig(res)
   if (authFailed(req)) return unauthorized(res)
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return missingConfig(res)
 
   try {
     if (req.method === 'POST') return await handlePush(req, res)

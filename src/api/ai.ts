@@ -3,6 +3,20 @@ import { apiRequest } from './client'
 export type HealthResponse = {
   ok: boolean
   service: string
+  capabilities: {
+    ai: {
+      configured: boolean
+      available: boolean
+      checkedLive: boolean
+      message: string
+    }
+    sync: {
+      configured: boolean
+      available: boolean
+      checkedLive: boolean
+      message: string
+    }
+  }
 }
 
 export type SummarizeInput = {
@@ -26,8 +40,8 @@ export type TagsResponse = {
   suggestions: string[]
 }
 
-export async function checkApiHealth() {
-  return apiRequest<HealthResponse>('/api/health')
+export async function checkApiHealth(probe = false) {
+  return apiRequest<HealthResponse>(probe ? '/api/health?probe=1' : '/api/health')
 }
 
 export async function summarizeContent(input: SummarizeInput) {
