@@ -133,6 +133,17 @@ async function runWrite(store: Store, req: AgentRequest): Promise<{ ok: boolean;
           updatedAt: now,
         };
         await store.upsertKP(kp);
+        // 自动关联回文章的 knowledgePoints 数组
+        const sourceArticleIds = Array.isArray(p.sourceArticleIds) ? (p.sourceArticleIds as string[]) : [];
+        for (const articleId of sourceArticleIds) {
+          const article = store.articles.find((a) => a.id === articleId);
+          if (article && !article.knowledgePoints.includes(kp.id)) {
+            await store.upsertArticle({
+              ...article,
+              knowledgePoints: [...article.knowledgePoints, kp.id],
+            });
+          }
+        }
         return { ok: true, data: { id: kp.id, title: kp.title } };
       }
       case 'kb.update_knowledge_point': {
@@ -162,7 +173,7 @@ async function runWrite(store: Store, req: AgentRequest): Promise<{ ok: boolean;
           notes: p.content ? String(p.content) : undefined,
           categoryId: catId,
           tags: Array.isArray(p.tagIds) ? (p.tagIds as string[]) : [],
-          knowledgePoints: [],
+          knowledgePoints: Array.isArray(p.knowledgePointIds) ? (p.knowledgePointIds as string[]) : [],
           provenanceRole: p.provenanceRole
             ? String(p.provenanceRole) as ProvenanceRole
             : 'unknown',

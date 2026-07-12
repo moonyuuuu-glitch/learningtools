@@ -79,7 +79,7 @@ const TOOLS = [
   },
   {
     name: 'kb.create_knowledge_point',
-    description: '新建知识点（需用户在网页中审批后生效）',
+    description: '新建知识点（需用户在网页中审批后生效）。传 sourceArticleIds 会自动把知识点关联到对应文章，使图谱产生共现边。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,6 +87,7 @@ const TOOLS = [
         description: { type: 'string' },
         categoryId: { type: 'string' },
         tagIds: { type: 'array', items: { type: 'string' } },
+        sourceArticleIds: { type: 'array', items: { type: 'string' }, description: '关联的文章 ID，知识点会自动写入这些文章的 knowledgePoints 数组' },
       },
       required: ['title'],
     },
@@ -113,7 +114,7 @@ const TOOLS = [
   },
   {
     name: 'kb.create_article',
-    description: '新建文章（需审批）',
+    description: '新建文章（需审批）。传 knowledgePointIds 会自动关联已有知识点。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,6 +122,7 @@ const TOOLS = [
         content: { type: 'string' },
         categoryId: { type: 'string' },
         tagIds: { type: 'array', items: { type: 'string' } },
+        knowledgePointIds: { type: 'array', items: { type: 'string' }, description: '关联的知识点 ID' },
         provenanceRole: {
           type: 'string',
           enum: ['owner_input', 'external_source', 'published_product', 'unknown'],

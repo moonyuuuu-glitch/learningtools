@@ -1,8 +1,10 @@
 import { nanoid } from 'nanoid'
 import {
   listKnowledgePoints,
+  listArticles,
   listLinkSuggestions,
   saveLinkSuggestion,
+  saveArticle,
 } from '../db/database'
 import { findLinkCandidates } from './graphAnalytics'
 import type { LinkSuggestion } from '../types'
@@ -14,11 +16,13 @@ import type { LinkSuggestion } from '../types'
  * 1. 图谱健康分析 → 生成 Insight（孤岛、过时、空白）
  * 2. 候选关联生成 → 写入 LinkSuggestion（待确认）
  * 3. 复习提醒 → 生成 Insight
+ * 4. 一次性修复：按标签匹配把孤立知识点关联回文章
  *
  * 全部纯脚本，零 AI 调用
  */
 
 const DEFAULT_INTERVAL = 5 * 60_000 // 5 分钟
+const ORPHAN_FIX_KEY = 'learningtools.orphan-kp-fix.v1'
 let _intervalId: ReturnType<typeof setInterval> | null = null
 
 /** 启动后台循环 */
@@ -26,6 +30,7 @@ export function startBackgroundLoop(intervalMs = DEFAULT_INTERVAL) {
   stopBackgroundLoop()
   // 启动后延迟 10s 跑第一次（避免阻塞初始渲染）
   setTimeout(() => {
+    void fixOrphanKnowledgePoints()
     runCognitionCycle()
     _intervalId = setInterval(runCognitionCycle, intervalMs)
   }, 10_000)
@@ -83,5 +88,45 @@ async function generateLinkSuggestions() {
 
   if (suggestions.length > 0) {
     await Promise.all(suggestions.slice(0, 20).map(saveLinkSuggestion))
+  }
+}
+
+// ─── 一次性修复：按标签匹配把孤立知识点关联回文章 ──────
+
+async function fixOrphanKnowledgePoints() {
+  try {
+    if (localStorage.getItem(ORPHAN_FIX_KEY)) return
+    const allKPs = await listKnowledgePoints()
+    const allArticles = await listArticles()
+    if (allKPs.length === 0 || allArticles.length === 0) return
+
+    const referencedKPIds = new Set(allArticles.flatMap((a) => a.knowledgePoints))
+    const orphans = allKPs.filter((kp) => !referencedKPIds.has(kp.id))
+    if (orphans.length === 0) {
+      localStorage.setItem(ORPHAN_FIX_KEY, String(Date.now()))
+      return
+    }
+
+    let fixCount = 0
+    for (const article of allArticles) {
+      if (article.tags.length === 0) continue
+      const matched = orphans.filter(
+        (kp) => kp.tags.length > 0 && kp.tags.some((tag) => article.tags.includes(tag)),
+      )
+      if (matched.length === 0) continue
+      const newIds = matched
+        .map((kp) => kp.id)
+        .filter((id) => !article.knowledgePoints.includes(id))
+      if (newIds.length === 0) continue
+      await saveArticle({
+        ...article,
+        knowledgePoints: [...article.knowledgePoints, ...newIds],
+      })
+      fixCount += newIds.length
+    }
+    console.info(`[backgroundLoop] Fixed ${fixCount} orphan KP-article links`)
+    localStorage.setItem(ORPHAN_FIX_KEY, String(Date.now()))
+  } catch (err) {
+    console.warn('[backgroundLoop] Orphan fix error:', err)
   }
 }
