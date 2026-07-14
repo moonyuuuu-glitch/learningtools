@@ -32,6 +32,71 @@ npm run dev
 
 - `http://localhost:5173`
 
+## 安装与使用说明（简版）
+
+### 1. 本地安装
+
+```bash
+npm install
+npm run dev
+```
+
+打开：
+
+- `http://localhost:5173`
+
+### 2. 基础使用
+
+- **资料库**：新增文章、分类、标签，并给文章关联知识点
+- **图谱**：查看知识点之间的关系网络
+- **审核箱**：处理 3 类待办
+  - `AI 建议`：AI 提取的概念、框架、关系
+  - `知识治理`：已有正式关系因为来源变化、缺证据等需要复核
+  - `Agent 审批`：外部 Agent 的写入请求，必须人工批准后才会生效
+
+### 3. 图谱录入建议
+
+- 一篇文章建议关联 **3~8 个知识点**
+- 一篇文章建议设置 **2~4 个标签**
+- 图谱显示的是 **知识点**，不是文章本身
+- 标签主要用于筛选，不是图谱节点
+
+### 4. 接入外部 Agent（MCP）
+
+在网页右上角打开 **「接入 Agent」** 后：
+
+1. 生成一个带权限的 token
+2. 保持网页开启，并开启浏览器桥接
+3. 在 MCP 客户端中配置：
+
+```json
+{
+  "mcpServers": {
+    "verdent-study-kb": {
+      "url": "https://learningtools-six.vercel.app/api/agent/mcp",
+      "headers": {
+        "Authorization": "Bearer <你的令牌>"
+      }
+    }
+  }
+}
+```
+
+如果客户端只支持 stdio，可用：
+
+```bash
+npx -y mcp-remote@latest "https://learningtools-six.vercel.app/api/agent/mcp" \
+  --transport http-only \
+  --header "Authorization: Bearer <你的令牌>"
+```
+
+### 5. Agent 使用注意事项
+
+- **读操作**：可直接读取当前浏览器里的本地知识库
+- **写操作**：不会直接落库，必须经过网页里的人工审批
+- **网页关闭时**：Agent 会因为桥接离线而无法正常调用
+- **token 吊销后**：旧客户端会立刻失效
+
 ## 本地构建
 
 ```bash
