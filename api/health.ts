@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.json({
     ok: true,
-    service: 'learningtools-api',
+    service: 'learningtools',
     capabilities: {
       ai: {
         configured: aiConfigured,
