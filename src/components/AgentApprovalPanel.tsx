@@ -30,9 +30,14 @@ export default function AgentApprovalPanel({
     >
       <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: 'var(--accent-light)', borderBottom: '1px solid var(--border-light)' }}>
         <ShieldAlert size={15} style={{ color: 'var(--accent)' }} />
-        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-          Agent 待审批（{proposals.length}）
-        </span>
+        <div className="min-w-0">
+          <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Agent 写入审批（{proposals.length}）
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            只有外部 Agent 想修改知识库时才会出现在这里；批准后才真正写入。
+          </div>
+        </div>
       </div>
       <div className="max-h-96 overflow-y-auto">
         {proposals.map((p) => (

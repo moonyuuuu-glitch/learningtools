@@ -923,6 +923,50 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--border-light);
 }
 
+.review-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1.35rem;
+}
+
+.review-overview article {
+  border: 1px solid var(--border-light);
+  background: #fbfaf7;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+}
+
+.review-overview article[data-active='true'] {
+  border-color: #a8b8a6;
+  box-shadow: 0 0 0 1px rgba(124, 143, 125, 0.14);
+}
+
+.review-overview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.review-overview article p {
+  margin: 0.5rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.6;
+}
+
+.review-overview article strong {
+  display: inline-block;
+  margin-top: 0.7rem;
+  color: #7f6650;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
 .review-tabs button {
   display: inline-flex;
   align-items: center;
@@ -1011,6 +1055,12 @@ textarea:focus-visible {
 
 .candidate-actions {
   justify-content: flex-start;
+}
+
+.review-inline-note {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 0.65rem;
 }
 
 .review-empty {
