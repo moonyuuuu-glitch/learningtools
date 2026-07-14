@@ -568,7 +568,7 @@ export default function ArticleLibrary({ store }: Props) {
             return (
               <button key={tag.id} onClick={() => store.setFilterTags(active ? store.filterTags.filter((t) => t !== tag.id) : [...store.filterTags, tag.id])}
                 className="text-[11px] px-2.5 py-1 rounded-full transition-all font-medium"
-                style={{ background: active ? tag.color : 'var(--bg-card)', color: active ? '#fff' : 'var(--text-secondary)', border: active ? 'none' : '1px solid var(--border-light)', boxShadow: active ? 'none' : 'var(--shadow)' }}>
+                style={{ background: active ? tag.color : 'var(--bg-card)', color: active ? '#fff' : 'var(--text-secondary)', border: `1px solid ${active ? tag.color : 'var(--border-light)'}`, boxShadow: active ? 'none' : 'var(--shadow)' }}>
                 {!active && <span className="inline-block w-1.5 h-1.5 rounded-full mr-1" style={{ background: tag.color }} />}{tag.name}
               </button>
             );
