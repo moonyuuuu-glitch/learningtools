@@ -8,6 +8,18 @@ function jsonHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', ...workspaceHeaders() };
 }
 
+async function readJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(`请求失败（${res.status} ${res.statusText || 'No Content'}）`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`请求失败（${res.status} ${res.statusText || 'Invalid JSON'}）`);
+  }
+}
+
 /** 首次向后端注册本浏览器 workspace（幂等） */
 export async function registerWorkspace(): Promise<{ success: boolean; error?: string }> {
   const secretHash = await workspaceSecretHash();
@@ -16,7 +28,7 @@ export async function registerWorkspace(): Promise<{ success: boolean; error?: s
     headers: jsonHeaders(),
     body: JSON.stringify({ secretHash }),
   });
-  return res.json();
+  return readJson(res);
 }
 
 /** 生成令牌（明文仅此一次返回） */
@@ -29,7 +41,7 @@ export async function createToken(
     headers: jsonHeaders(),
     body: JSON.stringify({ label, scopes }),
   });
-  return res.json();
+  return readJson(res);
 }
 
 interface RawTokenRow {
@@ -42,7 +54,7 @@ interface RawTokenRow {
 
 export async function listTokens(): Promise<AgentTokenMeta[]> {
   const res = await fetch(`${AGENT_BASE}/tokens`, { headers: jsonHeaders() });
-  const data = await res.json();
+  const data = await readJson<{ success?: boolean; tokens?: RawTokenRow[] }>(res);
   if (!data?.success) return [];
   return (data.tokens as RawTokenRow[]).map((t) => ({
     id: t.id,
@@ -59,13 +71,13 @@ export async function revokeToken(id: string): Promise<{ success: boolean; error
     headers: jsonHeaders(),
     body: JSON.stringify({ id }),
   });
-  return res.json();
+  return readJson(res);
 }
 
 /** 浏览器长轮询待处理请求 */
 export async function pollRequests(signal?: AbortSignal): Promise<AgentRequest[]> {
   const res = await fetch(`${AGENT_BASE}/poll`, { headers: jsonHeaders(), signal });
-  const data = await res.json();
+  const data = await readJson<{ success?: boolean; requests?: Array<{ id: string; tool: string; scope: AgentScope; params: Record<string, unknown>; created_at: string }> }>(res);
   if (!data?.success || !Array.isArray(data.requests)) return [];
   return (data.requests as Array<{ id: string; tool: string; scope: AgentScope; params: Record<string, unknown>; created_at: string }>).map((r) => ({
     id: r.id,

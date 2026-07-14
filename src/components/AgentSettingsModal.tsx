@@ -28,7 +28,9 @@ export default function AgentSettingsModal({
   }, []);
 
   useEffect(() => {
-    void registerWorkspace().then(refresh);
+    void registerWorkspace().then(refresh).catch((error) => {
+      setError(error instanceof Error ? error.message : 'Agent 服务暂时不可用');
+    });
   }, [refresh]);
 
   const toggleScope = (s: AgentScope) => {
