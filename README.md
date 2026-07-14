@@ -10,8 +10,9 @@
 - 本地 IndexedDB 数据存储
 - JSON 导入 / 导出
 - GitHub Pages 自动部署
-- 预留 AI API 接入层（推荐 Vercel Functions）
-- `learningtools-api/` Vercel Functions MVP 后端骨架
+- 文章 AI 辅助（总结、标签、概念抽取、关系建议）
+- 云同步（本地快照 ↔ 云端）
+- Agent MCP 接入（读写 + 人在环审批）
 
 ## 技术栈
 
@@ -129,55 +130,57 @@ npm run preview
 - 执行 `npm run build`
 - 部署 `dist/`
 
-## AI API 架构建议
+## 单仓库部署说明
 
-推荐组合：
+当前项目已经可以作为**一个仓库单独运行**：
 
-- 前端：GitHub Pages
-- API 代理：Vercel Functions
-- 本地数据：IndexedDB
+- 前端页面：`src/`
+- Serverless 接口：`api/`
+- 生产部署：Vercel
 
-前端已预留 API 客户端层：
+### 需要的环境变量
 
+在 Vercel 项目里配置：
+
+```bash
+DEEPSEEK_API_KEY=your_key
+OPENAI_API_KEY=your_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SYNC_SECRET=your_sync_secret
+FEISHU_APP_ID=your_feishu_app_id
+FEISHU_APP_SECRET=your_feishu_app_secret
+UPSTASH_REDIS_REST_URL=your_upstash_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_token
+```
+
+### 前端如果本域部署
+
+如果前端和 API 同域部署，`VITE_API_BASE_URL` 可以留空；如果分开部署，再填：
+
+```bash
+VITE_API_BASE_URL=https://your-domain.vercel.app
+```
+
+### 这个仓库现在已经包含
+
+- `api/health.ts`
+- `api/sync.ts`
+- `api/agent.ts`
+- `api/ai/*`
 - `src/api/client.ts`
 - `src/api/ai.ts`
-- `src/config.ts`
+- `src/api/sync.ts`
+- `src/api/agent.ts`
 
-前端通过环境变量读取 API 地址：
+### 还要保留的能力
 
-```bash
-VITE_API_BASE_URL=https://your-api.vercel.app
-```
-
-当前仓库内已包含一份可独立部署的 API 骨架目录：
-
-- `learningtools-api/`
-
-建议首批接口：
-
-- `GET /api/health`
-- `POST /api/ai/summarize`
-- `POST /api/ai/tags`
-
-### 前端环境变量
-
-在前端部署时配置：
-
-```bash
-VITE_API_BASE_URL=https://your-learningtools-api.vercel.app
-```
-
-### 后端环境变量
-
-在 Vercel 项目中配置：
-
-```bash
-OPENAI_API_KEY=your_key
-OPENAI_MODEL=gpt-4o-mini
-```
+- AI 总结 / 标签 / 概念 / 关系建议
+- Agent MCP 读写与审批
+- 本地快照云同步
+- 健康检查
 
 ## 后续建议
 
-- 为 Dexie 增加版本迁移逻辑
-- 在知识点详情页接入 AI 总结 / 标签建议
-- 单独创建 `learningtools-api` 仓库并部署到 Vercel
+- 保持单仓库结构，避免拆分成两个仓库导致部署/配置混乱
+- 如果后面要做完全静态化，再单独评估是否保留后端能力
