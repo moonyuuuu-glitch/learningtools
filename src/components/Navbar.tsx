@@ -32,6 +32,7 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
   ] as const;
 
   const syncReady = syncStatus === 'ready';
+  const aiConnected = apiStatus === 'configured' || apiStatus === 'ready';
 
   return (
     <>
@@ -120,8 +121,23 @@ export default function Navbar({ store, onOpenImport, onToggleInsights, onSyncPu
                 ? 'AI 已配置'
               : apiStatus === 'error'
                 ? 'AI 不可用'
-                : '检测 AI'}
+                : '连接 AI'}
         </button>
+
+        {!aiConnected && (
+          <button
+            onClick={() => void verifyApi()}
+            className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
+            style={{
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-surface)',
+              borderColor: 'var(--border-light)',
+            }}
+            title="本浏览器需要自己连接一次 AI"
+          >
+            连接 AI
+          </button>
+        )}
 
         <div
           className="text-[11px] px-2.5 py-1 rounded-full border"

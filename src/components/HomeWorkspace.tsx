@@ -24,10 +24,10 @@ export default function HomeWorkspace({ store }: { store: Store }) {
     store.apiStatus === 'ready'
       ? 'AI 实时可用'
       : store.apiStatus === 'configured'
-        ? 'AI 已配置'
+        ? 'AI 已连接'
         : store.apiStatus === 'checking'
           ? 'AI 检测中'
-          : 'AI 未就绪'
+          : 'AI 未连接'
 
   const syncLabel = store.syncStatus === 'ready' ? '云同步可用' : '云同步未配置'
 
@@ -60,7 +60,7 @@ export default function HomeWorkspace({ store }: { store: Store }) {
             <section className="empty-home-status-card">
               <span className="empty-home-status-label">AI 状态</span>
               <strong>{aiLabel}</strong>
-              <p>{store.apiMessage || '尚未检测 AI 能力'}</p>
+              <p>{store.apiMessage || '本浏览器还没有连接 AI，需要你自己点一次“连接 AI”'}</p>
               <button className="empty-home-inline-action" onClick={() => void store.verifyApi()}>
                 <Bot size={14} /> 重新检测 AI
               </button>

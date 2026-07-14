@@ -55,6 +55,7 @@ import type {
 } from '../types';
 
 export function useStore() {
+  const AI_CONNECTED_KEY = 'kb_ai_connected';
   const [viewMode, setViewMode] = useState<ViewMode>('home');
   const [knowledgePoints, setKPs] = useState<KnowledgePoint[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -143,6 +144,13 @@ export function useStore() {
     try {
       const health = await checkApiHealth(probe);
       applyHealthStatus(health);
+      if (probe) {
+        if (health.capabilities.ai.available) {
+          localStorage.setItem(AI_CONNECTED_KEY, '1');
+        } else {
+          localStorage.removeItem(AI_CONNECTED_KEY);
+        }
+      }
     } catch (error) {
       setApiStatus('error');
       setApiMessage(error instanceof Error ? error.message : 'AI 状态检测失败');
@@ -156,7 +164,12 @@ export function useStore() {
   }, [refreshHealth]);
 
   useEffect(() => {
-    void refreshHealth(false);
+    if (localStorage.getItem(AI_CONNECTED_KEY) === '1') {
+      void refreshHealth(false);
+    } else {
+      setApiStatus('idle');
+      setApiMessage('尚未连接 AI，请点击“连接 AI”');
+    }
   }, [refreshHealth]);
 
   // Scene actions
