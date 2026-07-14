@@ -37,6 +37,9 @@ npm run dev
 
 ### 1. 本地安装
 
+step.1 先把代码下载到本地（git clone / 解压 Release 源码包）
+step.2 终端切换到项目文件夹
+
 ```bash
 npm install
 npm run dev
